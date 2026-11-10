@@ -1,0 +1,2 @@
+PWA ikonları için bu klasöre icon-192.png ve icon-512.png dosyaları ekleyin.
+Geliştirme aşamasında placeholder SVG ikonlar otomatik oluşturulacaktır.
