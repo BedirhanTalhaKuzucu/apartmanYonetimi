@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { lockBodyScroll } from '@/lib/scrollLock';
 
 export interface ModalProps {
   open?: boolean;
@@ -38,25 +39,25 @@ export default function Modal({
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
-  // Body scroll engelleme
+  // Body scroll kilidi - iOS Safari dahil %100 scroll engelleme
   useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden';
-    }
+    if (!open) return;
+    const unlock = lockBodyScroll();
     return () => {
-      document.body.style.overflow = '';
+      unlock();
     };
   }, [open]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overscroll-contain">
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-black/40 animate-fade-in"
+        className="fixed inset-0 bg-black/40 animate-fade-in touch-none"
         onClick={onClose}
         aria-hidden="true"
+        onTouchMove={(e) => e.preventDefault()}
       />
 
       {/* Modal panel */}
@@ -65,14 +66,17 @@ export default function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          'relative z-10 w-full min-w-0 max-w-full bg-white shadow-xl animate-slide-up',
+          'relative z-10 w-full min-w-0 max-w-full bg-white shadow-xl animate-slide-up overscroll-contain',
           'sm:rounded-xl rounded-t-xl max-h-[90vh] flex flex-col overflow-hidden',
           sizeClasses[size]
         )}
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 border-b border-gray-100 shrink-0">
+          <div
+            className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 border-b border-gray-100 shrink-0 touch-none"
+            onTouchMove={(e) => e.preventDefault()}
+          >
             <h2 className="text-base sm:text-lg font-semibold text-gray-900 truncate pr-2">{title}</h2>
             <button
               onClick={onClose}
@@ -85,11 +89,14 @@ export default function Modal({
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-5 py-3.5 sm:py-4 min-w-0">{children}</div>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-5 py-3.5 sm:py-4 min-w-0 overscroll-contain">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3 px-4 sm:px-5 py-3 sm:py-4 border-t border-gray-100 shrink-0 [&>*]:w-full sm:[&>*]:w-auto">
+          <div
+            className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3 px-4 sm:px-5 py-3 sm:py-4 border-t border-gray-100 shrink-0 [&>*]:w-full sm:[&>*]:w-auto touch-none"
+            onTouchMove={(e) => e.preventDefault()}
+          >
             {footer}
           </div>
         )}

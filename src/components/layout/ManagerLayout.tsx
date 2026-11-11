@@ -16,9 +16,15 @@ import {
   DoorOpen,
   ChevronDown,
   Scale,
+  Smartphone,
+  Download,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { usePWAInstall, triggerPWAInstallModal } from '@/hooks/usePWAInstall';
+import { usePaymentNotifications } from '@/hooks/usePaymentNotifications';
+import { lockBodyScroll } from '@/lib/scrollLock';
 
 const mainNavItems = [
   { to: '/yonetici', label: 'Ana Sayfa', shortLabel: 'Ana Sayfa', icon: Home, end: true },
@@ -28,6 +34,7 @@ const mainNavItems = [
 ];
 
 const moreNavItems = [
+  { to: '/yonetici/sakinler', label: 'Sakinler', icon: Users },
   { to: '/yonetici/duyurular', label: 'Duyurular', icon: Megaphone },
   { to: '/yonetici/odemeler', label: 'Ödemeler', icon: Wallet },
   { to: '/yonetici/talepler', label: 'Talepler', icon: Wrench },
@@ -42,6 +49,24 @@ export default function ManagerLayout() {
   const navigate = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
   const [sideOpen, setSideOpen] = useState(true);
+  const { isStandalone } = usePWAInstall();
+  const { data: notifications } = usePaymentNotifications(currentApartment?.id);
+  const pendingCount = notifications?.filter((n: any) => n.status === 'pending').length ?? 0;
+
+  // Body scroll kilidi - "Daha Fazla" menüsü açıkken arkaplanın kaymasını iOS Safari dahil %100 engelle
+  useEffect(() => {
+    if (moreOpen) {
+      const unlock = lockBodyScroll();
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setMoreOpen(false);
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        unlock();
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [moreOpen]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -72,25 +97,50 @@ export default function ManagerLayout() {
 
         {/* Sidebar Nav Items */}
         <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-1">
-          {[...mainNavItems, ...moreNavItems].map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={!!(item as any).end}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-primary-50 text-primary-700 font-semibold'
-                    : 'text-gray-600 hover:bg-gray-100'
-                )
-              }
-            >
-              <item.icon className="h-5 w-5 shrink-0" />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
+          {[...mainNavItems, ...moreNavItems].map((item) => {
+            const isPayments = item.to === '/yonetici/odemeler';
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={!!(item as any).end}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-primary-50 text-primary-700 font-semibold'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  )
+                }
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <item.icon className="h-5 w-5 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {isPayments && pendingCount > 0 && (
+                  <span className="flex h-5 min-w-5 px-1.5 items-center justify-center rounded-full bg-amber-500 text-[11px] font-bold text-white shadow-2xs">
+                    {pendingCount}
+                  </span>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
+
+        {/* PWA Kurulum Butonu (Kurulu Değilse) */}
+        {!isStandalone && (
+          <div className="px-3 pb-2">
+            <button
+              type="button"
+              onClick={triggerPWAInstallModal}
+              className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold text-primary-700 bg-primary-50/90 hover:bg-primary-100 rounded-lg transition-colors border border-primary-200/90 shadow-2xs text-left cursor-pointer"
+              title="Uygulamayı Cihaza Yükle"
+            >
+              <Smartphone className="w-4 h-4 text-primary-600 shrink-0" />
+              <span className="truncate">Uygulama Olarak Yükle</span>
+            </button>
+          </div>
+        )}
 
         {/* Sidebar Footer User Info */}
         <div className="p-3 border-t border-gray-200 flex items-center justify-between bg-gray-50/50">
@@ -160,13 +210,30 @@ export default function ManagerLayout() {
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {!isStandalone && (
+                <button
+                  type="button"
+                  onClick={triggerPWAInstallModal}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 active:bg-primary-200 rounded-lg border border-primary-200 transition-colors shadow-2xs cursor-pointer"
+                  title="Uygulamayı Cihaza Yükle"
+                >
+                  <Download className="w-3.5 h-3.5 text-primary-600 shrink-0" />
+                  <span className="hidden sm:inline">Uygulama Olarak İndir</span>
+                  <span className="sm:hidden">App İndir</span>
+                </button>
+              )}
               <NavLink
-                to="/yonetici/bildirimler"
-                className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-600"
-                title="Bildirimler"
+                to="/yonetici/odemeler?tab=bildirimler"
+                className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
+                title={pendingCount > 0 ? `${pendingCount} Onay Bekleyen Ödeme Bildirimi` : 'Bildirimler'}
               >
                 <Bell className="h-5 w-5" />
+                {pendingCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow-xs">
+                    {pendingCount}
+                  </span>
+                )}
               </NavLink>
               <button
                 onClick={handleSignOut}
@@ -181,7 +248,7 @@ export default function ManagerLayout() {
 
         {/* Page Content */}
         <main className="flex-1 min-w-0">
-          <div className="w-full max-w-2xl md:max-w-6xl mx-auto px-4 py-4 md:py-6 pb-24 md:pb-8">
+          <div className="w-full max-w-2xl md:max-w-6xl mx-auto px-4 py-4 md:py-6 pb-20 md:pb-8">
             <Outlet />
           </div>
         </main>
@@ -204,22 +271,31 @@ export default function ManagerLayout() {
         ))}
         <button
           onClick={() => setMoreOpen(true)}
-          className="bottom-nav-item"
+          className="bottom-nav-item relative"
         >
-          <Menu className="h-5 w-5" />
+          <div className="relative inline-flex items-center justify-center">
+            <Menu className="h-5 w-5" />
+            {pendingCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white" />
+            )}
+          </div>
           <span>Daha Fazla</span>
         </button>
       </nav>
 
-      {/* ── Mobile "More" Sheet (100% untouched) ── */}
+      {/* ── Mobile "More" Sheet ── */}
       {moreOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 md:hidden overscroll-contain">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/40 animate-fade-in touch-none"
             onClick={() => setMoreOpen(false)}
+            onTouchMove={(e) => e.preventDefault()}
           />
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl animate-slide-up safe-bottom">
-            <div className="flex items-center justify-between px-5 pt-4 pb-2">
+          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl animate-slide-up safe-bottom max-h-[85vh] overflow-y-auto overscroll-contain">
+            <div
+              className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0 touch-none"
+              onTouchMove={(e) => e.preventDefault()}
+            >
               <span className="font-semibold text-gray-900">Daha Fazla</span>
               <button
                 onClick={() => setMoreOpen(false)}
@@ -229,24 +305,49 @@ export default function ManagerLayout() {
               </button>
             </div>
             <nav className="px-3 pb-6 space-y-1">
-              {moreNavItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setMoreOpen(false)}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium',
-                      isActive
-                        ? 'bg-primary-50 text-primary-700'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    )
-                  }
+              {moreNavItems.map((item) => {
+                const isPayments = item.to === '/yonetici/odemeler';
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setMoreOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center justify-between rounded-lg px-3 py-3 text-sm font-medium',
+                        isActive
+                          ? 'bg-primary-50 text-primary-700 font-semibold'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      )
+                    }
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon className="h-5 w-5 shrink-0" />
+                      <span>{item.label}</span>
+                    </div>
+                    {isPayments && pendingCount > 0 && (
+                      <span className="flex h-5 px-2 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white shadow-2xs">
+                        {pendingCount} onay bekliyor
+                      </span>
+                    )}
+                  </NavLink>
+                );
+              })}
+
+              {!isStandalone && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    triggerPWAInstallModal();
+                  }}
+                  className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 w-full text-left cursor-pointer"
                 >
-                  <item.icon className="h-5 w-5" />
-                  {item.label}
-                </NavLink>
-              ))}
+                  <Download className="h-5 w-5 text-primary-600 shrink-0" />
+                  <span>Uygulama Olarak Yükle</span>
+                </button>
+              )}
+
               <button
                 onClick={handleSignOut}
                 className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-red-600 hover:bg-red-50 w-full"

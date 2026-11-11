@@ -1,4 +1,4 @@
-﻿import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
@@ -36,6 +36,7 @@ export function DueStatusBadge({ status }: { status: string }) {
     partially_paid: { variant: 'warning', label: 'Kısmi Ödeme' },
     unpaid: { variant: 'neutral', label: 'Ödenmedi' },
     overdue: { variant: 'danger', label: 'Gecikmiş' },
+    upcoming: { variant: 'info', label: 'Vadesi Gelmedi' },
   };
   const { variant, label } = map[status] ?? { variant: 'neutral' as const, label: status };
   return <Badge variant={variant}>{label}</Badge>;

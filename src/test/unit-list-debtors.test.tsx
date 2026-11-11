@@ -32,6 +32,7 @@ vi.mock('@/hooks/usePayments', () => ({
   usePayments: () => ({ data: [], isLoading: false }),
   useCreatePayment: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCancelPayment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  usePaymentNotifications: () => ({ data: [], isLoading: false }),
 }));
 
 vi.mock('@/hooks/usePaymentNotifications', () => ({

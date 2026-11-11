@@ -1,30 +1,37 @@
-﻿import type { ReactNode } from 'react';
+import type { ReactNode, HTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
-interface CardProps {
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   className?: string;
+  id?: string;
   title?: string;
   actions?: ReactNode;
   onClick?: () => void;
+  as?: 'div' | 'button';
 }
 
 export default function Card({
   children,
   className,
+  id,
   title,
   actions,
   onClick,
+  as,
+  ...rest
 }: CardProps) {
-  const Tag = onClick ? 'button' : 'div';
+  const Tag = as || (onClick ? 'button' : 'div');
   return (
     <Tag
+      id={id}
       className={cn(
         'card p-4',
         onClick && 'w-full text-left hover:shadow-md transition-shadow cursor-pointer',
         className
       )}
       onClick={onClick}
+      {...(rest as any)}
     >
       {(title || actions) && (
         <div className="flex items-center justify-between mb-3">

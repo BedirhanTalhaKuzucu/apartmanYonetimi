@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { InstallPWAPrompt } from '@/components/shared/InstallPWAPrompt';
 
 /* ── Layouts ── */
 const AuthLayout = React.lazy(() => import('@/components/layout/AuthLayout'));
@@ -22,6 +23,7 @@ const ApartmentListPage = React.lazy(() => import('@/pages/manager/ApartmentList
 const ApartmentDetailPage = React.lazy(() => import('@/pages/manager/ApartmentDetailPage'));
 const UnitListPage = React.lazy(() => import('@/pages/manager/UnitListPage'));
 const UnitDetailPage = React.lazy(() => import('@/pages/manager/UnitDetailPage'));
+const ResidentsPage = React.lazy(() => import('@/pages/manager/ResidentsPage'));
 const DuesPage = React.lazy(() => import('@/pages/manager/DuesPage'));
 const PaymentsPage = React.lazy(() => import('@/pages/manager/PaymentsPage'));
 const FinancialsPage = React.lazy(() => import('@/pages/manager/FinancialsPage'));
@@ -168,6 +170,27 @@ export default function App() {
     };
   }, []);
 
+  // Standalone PWA tespiti - Sadece PWA modundayken 'is-standalone' sınıfını ekle
+  useEffect(() => {
+    const checkStandalone = () => {
+      const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+        document.referrer.includes('android-app://');
+
+      if (isStandalone) {
+        document.documentElement.classList.add('is-standalone');
+      } else {
+        document.documentElement.classList.remove('is-standalone');
+      }
+    };
+
+    checkStandalone();
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    mediaQuery.addEventListener?.('change', checkStandalone);
+    return () => mediaQuery.removeEventListener?.('change', checkStandalone);
+  }, []);
+
   return (
     <Suspense fallback={<LoadingSpinner />}>
       <Routes>
@@ -214,6 +237,7 @@ export default function App() {
           <Route path="/yonetici/apartman/:id" element={<ApartmentDetailPage />} />
           <Route path="/yonetici/daireler" element={<UnitListPage />} />
           <Route path="/yonetici/daire/:id" element={<UnitDetailPage />} />
+          <Route path="/yonetici/sakinler" element={<ResidentsPage />} />
           <Route path="/yonetici/aidatlar" element={<DuesPage />} />
           <Route path="/yonetici/odemeler" element={<PaymentsPage />} />
           <Route path="/yonetici/gelir-gider" element={<FinancialsPage />} />
@@ -238,6 +262,7 @@ export default function App() {
           <Route path="/sakin/odeme-bildirimi" element={<PaymentNotificationForm />} />
           <Route path="/sakin/duyurular" element={<ResidentAnnouncementsPage />} />
           <Route path="/sakin/talepler" element={<ResidentRequestsPage />} />
+          <Route path="/sakin/talepler/yeni" element={<NewRequestPage />} />
           <Route path="/sakin/yeni-talep" element={<NewRequestPage />} />
           <Route path="/sakin/bildirimler" element={<ResidentNotificationsPage />} />
           <Route path="/sakin/profil" element={<ProfilePage />} />
@@ -246,6 +271,7 @@ export default function App() {
         {/* 404 */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <InstallPWAPrompt />
     </Suspense>
   );
 }

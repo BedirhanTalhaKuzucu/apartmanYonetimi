@@ -43,7 +43,12 @@ export function generateToken(length = 48): string {
  */
 export function buildWhatsAppUrl(phone: string, message: string): string {
   // wa.me numarayı sadece rakamlardan oluşacak şekilde bekler
-  const cleanPhone = phone.replace(/\D/g, '');
+  let cleanPhone = phone ? phone.replace(/\D/g, '') : '';
+  if (cleanPhone.startsWith('05') && cleanPhone.length === 11) {
+    cleanPhone = '90' + cleanPhone.slice(1);
+  } else if (cleanPhone.startsWith('5') && cleanPhone.length === 10) {
+    cleanPhone = '90' + cleanPhone;
+  }
   const encoded = encodeURIComponent(message);
   return `https://wa.me/${cleanPhone}?text=${encoded}`;
 }
@@ -203,4 +208,33 @@ export function isDueEligibleForUnitDebts(due: {
 
   return true;
 }
+
+/**
+ * Duyuru veya kayıtlardaki ek dosya URL'lerini dizi olarak ayrıştırır.
+ * Hem tekli URL'leri, hem JSON dizi stringlerini (örn. ["url1", "url2"]),
+ * hem de virgülle ayrılmış URL'leri destekler.
+ */
+export function parseAttachmentUrls(attachmentUrl: string | null | undefined): string[] {
+  if (!attachmentUrl) return [];
+  const trimmed = attachmentUrl.trim();
+  if (!trimmed) return [];
+
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((u) => String(u).trim()).filter(Boolean);
+      }
+    } catch {
+      // JSON parse edilemezse devam et
+    }
+  }
+
+  if (trimmed.includes(',')) {
+    return trimmed.split(',').map((u) => u.trim()).filter(Boolean);
+  }
+
+  return [trimmed];
+}
+
 

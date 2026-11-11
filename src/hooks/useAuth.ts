@@ -1,4 +1,4 @@
-﻿import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { parsePhoneToE164 } from '@/lib/format';
@@ -192,12 +192,13 @@ export function useAuth() {
   /**
    * Google OAuth ile giriş.
    * Supabase Dashboard'da Google provider'ın aktif olması gerekir.
+   * customRedirectTo verilirse o adrese yönlendirir, verilmezse mevcut origin'e döner.
    */
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (customRedirectTo?: string) => {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: customRedirectTo || `${window.location.origin}/`,
         queryParams: {
           prompt: 'select_account',
         },

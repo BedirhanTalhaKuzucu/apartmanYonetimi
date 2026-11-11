@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { isDueEligibleForUnitDebts } from '@/lib/utils';
+import { formatPeriod } from '@/lib/format';
 
 export function useDashboardStats() {
   const { currentApartment } = useAuthStore();
@@ -159,10 +160,25 @@ export interface DebtorUnit {
   residentName: string;
   residentPhone: string;
   residentRole: string;
+  userId?: string | null;
+  residents?: {
+    id?: string;
+    full_name: string;
+    phone?: string | null;
+    role?: string;
+    user_id?: string | null;
+  }[];
   totalDebt: number;
   overdueDebt: number;
   unpaidCount: number;
   periods: string[];
+  items?: {
+    description: string;
+    amount: number;
+    dueDate?: string | null;
+    period?: string | null;
+    isOverdue?: boolean;
+  }[];
 }
 
 export function useDebtorUnits() {
@@ -184,7 +200,7 @@ export function useDebtorUnits() {
       // 2. Fetch active units with active residents
       const { data: units, error: unitsError } = await supabase
         .from('units')
-        .select('id, unit_number, block, floor, unit_residents(full_name, phone, role, is_active)')
+        .select('id, unit_number, block, floor, unit_residents(user_id, full_name, phone, role, is_active)')
         .eq('apartment_id', aptId!)
         .eq('is_active', true);
 
@@ -207,8 +223,19 @@ export function useDebtorUnits() {
 
         if (remaining <= 0) return;
 
+        const isLate = Boolean(due.due_date && due.due_date < today);
+
         if (!debtMap[unit.id]) {
           const activeResidents = (unit.unit_residents ?? []).filter((r: any) => r.is_active);
+          const activeWithPhone = activeResidents
+            .map((r: any) => ({
+              id: r.id,
+              full_name: r.full_name?.trim() || 'İsimsiz Sakin',
+              phone: r.phone?.trim() || null,
+              role: r.role,
+              user_id: r.user_id || null,
+            }))
+            .filter((r: any) => r.phone);
           const primary = activeResidents[0];
 
           debtMap[unit.id] = {
@@ -219,15 +246,18 @@ export function useDebtorUnits() {
             residentName: primary?.full_name || 'Sakin Atanmadı',
             residentPhone: primary?.phone || '',
             residentRole: primary?.role === 'owner' ? 'Ev Sahibi' : primary?.role === 'tenant' ? 'Kiracı' : '',
+            userId: primary?.user_id || null,
+            residents: activeWithPhone,
             totalDebt: 0,
             overdueDebt: 0,
             unpaidCount: 0,
             periods: [],
+            items: [],
           };
         }
 
         debtMap[unit.id].totalDebt = Math.round((debtMap[unit.id].totalDebt + remaining) * 100) / 100;
-        if (due.due_date && due.due_date < today) {
+        if (isLate) {
           debtMap[unit.id].overdueDebt = Math.round((debtMap[unit.id].overdueDebt + remaining) * 100) / 100;
         }
         debtMap[unit.id].unpaidCount += 1;
@@ -236,6 +266,14 @@ export function useDebtorUnits() {
         } else if (!due.period && due.description && !debtMap[unit.id].periods.includes(due.description)) {
           debtMap[unit.id].periods.push(due.description);
         }
+
+        debtMap[unit.id].items!.push({
+          description: due.description || (due.period ? formatPeriod(due.period) : 'Aidat'),
+          amount: remaining,
+          dueDate: due.due_date,
+          period: due.period,
+          isOverdue: isLate,
+        });
       });
 
       return Object.values(debtMap).sort((a, b) => b.totalDebt - a.totalDebt);

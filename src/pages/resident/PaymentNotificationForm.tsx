@@ -32,18 +32,18 @@ export default function PaymentNotificationForm() {
   const [receiptUrl, setReceiptUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const unpaidDues = (dues || []).filter((d: any) => d.status !== 'paid' && isDueEligibleForUnitDebts(d));
+  const unpaidDues = (dues || []).filter((d: any) => d.status !== 'paid');
 
   // Auto-fill amount when due is selected
   useEffect(() => {
     if (selectedDueId && selectedDueId !== 'general') {
-      const due = unpaidDues.find((d: any) => d.id === selectedDueId);
+      const due = (dues || []).find((d: any) => d.id === selectedDueId);
       if (due) {
         const remaining = Number(due.amount) - Number((due as any).paid_amount || 0);
         setAmount(remaining.toFixed(2));
       }
     }
-  }, [selectedDueId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedDueId, dues]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,9 +114,10 @@ export default function PaymentNotificationForm() {
           <option value="general">Genel Ödeme</option>
           {unpaidDues.map((due: any) => {
             const remaining = Number(due.amount) - Number(due.paid_amount || 0);
+            const isFuture = !isDueEligibleForUnitDebts(due);
             return (
               <option key={due.id} value={due.id}>
-                {formatPeriod(due.period)} - {due.description} ({formatCurrency(remaining)} kalan)
+                {formatPeriod(due.period)} - {due.description} ({formatCurrency(remaining)} {isFuture ? '· Erken Ödeme' : 'kalan'})
               </option>
             );
           })}

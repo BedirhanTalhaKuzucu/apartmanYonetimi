@@ -16,8 +16,10 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useFinancialSummary } from '@/hooks/useFinancials';
+import { triggerPWAInstallModal } from '@/hooks/usePWAInstall';
 import Button from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { PhoneInput } from '@/components/ui/PhoneInput';
 import Modal from '@/components/ui/Modal';
 import { formatCurrency, formatPhone, parsePhoneToE164 } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
@@ -34,7 +36,8 @@ export default function ProfilePage() {
   const [email, setEmail] = useState(profile?.email || '');
   const [savingEmail, setSavingEmail] = useState(false);
 
-  const [phoneInput, setPhoneInput] = useState('');
+  const [phoneInput, setPhoneInput] = useState(profile?.phone || '');
+  const [editingPhone, setEditingPhone] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -112,14 +115,14 @@ export default function ProfilePage() {
     if (!phoneInput.trim() || !profile) return;
     setSavingPhone(true);
     try {
-      const e164 = parsePhoneToE164(phoneInput);
+      const e164 = parsePhoneToE164(phoneInput) || phoneInput.trim();
       const { error } = await supabase
         .from('profiles')
         .update({ phone: e164 })
         .eq('id', profile.id);
       if (error) throw error;
       await refreshProfile();
-      setPhoneInput('');
+      setEditingPhone(false);
       toast.success('Telefon numaranız güncellendi.');
     } catch {
       toast.error('Telefon numarası güncellenemedi.');
@@ -180,19 +183,19 @@ export default function ProfilePage() {
               <p className="text-xs text-amber-700 mt-1">
                 Yöneticinizin sizinle iletişim kurabilmesi için telefon numaranızı ekleyin.
               </p>
-              <div className="flex items-center gap-2 mt-3">
-                <input
-                  type="tel"
-                  value={phoneInput}
-                  onChange={(e) => setPhoneInput(e.target.value)}
-                  placeholder="05XX XXX XX XX"
-                  className="flex-1 px-3 py-2 border border-amber-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
-                />
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-3">
+                <div className="flex-1">
+                  <PhoneInput
+                    value={phoneInput}
+                    onChange={(e) => setPhoneInput(e.target.value)}
+                  />
+                </div>
                 <Button
                   size="sm"
                   onClick={handleSavePhone}
                   loading={savingPhone}
                   disabled={!phoneInput.trim()}
+                  className="sm:self-end"
                 >
                   Kaydet
                 </Button>
@@ -262,13 +265,46 @@ export default function ProfilePage() {
         </div>
 
         <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <Phone className="w-4 h-4 text-gray-400" />
-            <div>
+          <div className="flex items-start gap-3">
+            <Phone className="w-4 h-4 text-gray-400 mt-1" />
+            <div className="flex-1">
               <p className="text-xs text-gray-500">Telefon</p>
-              <p className="text-sm font-medium text-gray-900">
-                {profile?.phone ? formatPhone(profile.phone) : '—'}
-              </p>
+              {editingPhone ? (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-1">
+                  <div className="flex-1">
+                    <PhoneInput
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button size="sm" onClick={handleSavePhone} loading={savingPhone}>
+                      Kaydet
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingPhone(false);
+                        setPhoneInput(profile?.phone || '');
+                      }}
+                    >
+                      İptal
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p
+                  className="text-sm font-medium text-gray-900 cursor-pointer hover:text-primary-600 inline-block"
+                  onClick={() => {
+                    setPhoneInput(profile?.phone || '');
+                    setEditingPhone(true);
+                  }}
+                  title="Düzenlemek için tıklayın"
+                >
+                  {profile?.phone ? formatPhone(profile.phone) : <span className="text-gray-400">Belirtilmemiş (Ekle)</span>}
+                </p>
+              )}
             </div>
           </div>
 
@@ -390,17 +426,18 @@ export default function ProfilePage() {
       </div>
 
       {/* PWA Install */}
-      {deferredPrompt && !isStandalone && (
+      {!isStandalone && (
         <div className="bg-primary-50 rounded-xl border border-primary-200 p-4">
           <div className="flex items-center gap-3 mb-2">
-            <Download className="w-5 h-5 text-primary-600" />
-            <span className="text-sm font-semibold text-primary-900">Uygulamayı Yükle</span>
+            <Smartphone className="w-5 h-5 text-primary-600" />
+            <span className="text-sm font-semibold text-primary-900">Uygulama Olarak Yükle</span>
           </div>
-          <p className="text-sm text-primary-700 mb-3">
-            Uygulamayı telefonunuza ekleyerek daha hızlı erişebilir ve bildirim alabilirsiniz.
+          <p className="text-xs text-primary-700 mb-3">
+            Uygulamayı telefonunuza ekleyerek daha hızlı erişebilir ve anlık bildirimler alabilirsiniz.
           </p>
-          <Button size="sm" onClick={handleInstallPWA}>
-            Ana Ekrana Ekle
+          <Button size="sm" onClick={triggerPWAInstallModal}>
+            <Download className="w-4 h-4 mr-1.5" />
+            Yükleme Seçeneklerini Aç
           </Button>
         </div>
       )}

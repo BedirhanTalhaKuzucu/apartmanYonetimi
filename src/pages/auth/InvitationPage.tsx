@@ -1,8 +1,9 @@
-﻿import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useInvitationByToken, useAcceptInvitation } from '@/hooks/useInvitations';
 import { useAuth } from '@/hooks/useAuth';
 import { Building2, Home, Clock, CheckCircle2, XCircle, AlertTriangle, Eye, EyeOff, Phone, Lock, User, Mail } from 'lucide-react';
+import { PhoneInput } from '@/components/ui/PhoneInput';
 import toast from 'react-hot-toast';
 
 export default function InvitationPage() {
@@ -45,7 +46,7 @@ export default function InvitationPage() {
   const handleGoogleSignIn = async () => {
     setAuthLoading(true);
     try {
-      await signInWithGoogle();
+      await signInWithGoogle(`${window.location.origin}/davet/${token}`);
     } catch (error: any) {
       toast.error(error.message || 'Google ile giriş başarısız.');
     } finally {
@@ -115,7 +116,9 @@ export default function InvitationPage() {
           <XCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 mb-2">Geçersiz Davet</h2>
           <p className="text-gray-500 mb-6">
-            Bu davet bağlantısı geçersiz veya bulunamadı. Lütfen yöneticinizden yeni bir davet isteyin.
+            {error instanceof Error && !error.message.includes('PGRST116')
+              ? error.message
+              : 'Bu davet bağlantısı geçersiz veya bulunamadı. Lütfen yöneticinizden yeni bir davet isteyin.'}
           </p>
           <Link
             to="/giris"
@@ -312,23 +315,13 @@ export default function InvitationPage() {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Phone className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="05XX XXX XX XX"
-                    className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl text-base focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                    required
-                  />
-                </div>
-                {invitation.invited_phone && (
-                  <p className="text-xs text-gray-400 mt-1">Yönetici tarafından girildi — değiştirebilirsiniz</p>
-                )}
+                <PhoneInput
+                  label="Telefon"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  helper={invitation.invited_phone ? 'Yönetici tarafından girildi — değiştirebilirsiniz' : undefined}
+                />
               </div>
 
               {authMode === 'register' && (

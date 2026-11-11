@@ -34,6 +34,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency, formatShortDate, formatPeriod, isOverdue } from '@/lib/format';
 import { buildWhatsAppUrl, getPeriodsBetween, cn, generateIdempotencyKey } from '@/lib/utils';
+import { buildDebtReminderText, getSmartPortalUrl } from '@/lib/debtReminder';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import {
@@ -48,6 +49,7 @@ import {
 } from '@/hooks/useDues';
 import { useUnits } from '@/hooks/useUnits';
 import { useCreatePayment, useCancelPayment } from '@/hooks/usePayments';
+import SelectResidentModal, { type SelectResidentItem } from '@/components/shared/SelectResidentModal';
 import toast from 'react-hot-toast';
 
 const MONTHS = [
@@ -61,7 +63,7 @@ const currentMonth = new Date().getMonth();
 export default function DuesPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { currentApartment } = useAuthStore();
+  const { currentApartment, user } = useAuthStore();
   const { data: allDues, isLoading } = useDues(currentApartment?.id);
   const { data: units } = useUnits(currentApartment?.id);
   const createBulkDues = useCreateBulkDues();
@@ -87,6 +89,17 @@ export default function DuesPage() {
 
   // ── Hızlı Ödeme Kaydetme Durumu ──
   const [quickPayDue, setQuickPayDue] = useState<any | null>(null);
+  const [residentSelectModal, setResidentSelectModal] = useState<{
+    isOpen: boolean;
+    title?: string;
+    subtitle?: string;
+    residents: SelectResidentItem[];
+    onSelect: (resident: SelectResidentItem) => void;
+  }>({
+    isOpen: false,
+    residents: [],
+    onSelect: () => {},
+  });
   const [quickPayForm, setQuickPayForm] = useState({
     amount: '',
     payment_date: new Date().toISOString().split('T')[0],
@@ -540,20 +553,91 @@ export default function DuesPage() {
     }
   };
 
-  const handleWhatsAppReminder = (due: any) => {
-    const resident = due.unit?.residents?.[0];
+  const executeSendDueReminder = async (due: any, resident: any, targetUnit: any) => {
     if (!resident?.phone) {
       toast.error('Bu daireye ait telefon numarası bulunamadı');
       return;
     }
     const remaining = due.remaining_amount ?? due.amount - (due.paid_amount || 0);
-    const message = `Merhaba, ${currentApartment?.name} ${due.unit?.unit_number} numaralı dairenin ${
-      due.description || formatPeriod(due.period)
-    } aidatından ${formatCurrency(remaining)} ödeme kaydı henüz görünmemektedir.${
-      due.due_date ? ` Son ödeme tarihi ${formatShortDate(due.due_date)} idi.` : ''
-    } Ödeme yaptıysanız lütfen bu mesajı dikkate almayın. Teşekkürler.`;
+    const isLate = Boolean(due.due_date && isOverdue(due.due_date));
+
+    let smartLink: string | undefined;
+    try {
+      smartLink = await getSmartPortalUrl({
+        apartmentId: currentApartment!.id,
+        unitId: due.unit_id,
+        userId: resident.user_id,
+        residentName: resident.full_name,
+        residentPhone: resident.phone,
+        residentRole: resident.role,
+        createdBy: user?.id,
+      });
+    } catch {
+      smartLink = `${window.location.origin}/sakin/aidatlarim`;
+    }
+
+    const message = buildDebtReminderText({
+      apartmentName: currentApartment?.name || 'Apartman',
+      unitNumber: targetUnit?.unit_number || due.unit?.unit_number || '',
+      block: targetUnit?.block || due.unit?.block,
+      residentName: resident.full_name,
+      totalDebt: remaining,
+      overdueDebt: isLate ? remaining : 0,
+      items: [
+        {
+          description: due.description || (due.period ? formatPeriod(due.period) : 'Aidat'),
+          amount: remaining,
+          dueDate: due.due_date,
+          period: due.period,
+          isOverdue: isLate,
+        },
+      ],
+      smartLink,
+    });
+
     const url = buildWhatsAppUrl(resident.phone, message);
-    window.open(url, '_blank');
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleWhatsAppReminder = (due: any) => {
+    const targetUnit = units?.find((u: any) => u.id === due.unit_id);
+    const rawResidents =
+      targetUnit?.unit_residents ||
+      (targetUnit as any)?.residents ||
+      due.unit?.residents ||
+      due.unit?.unit_residents ||
+      [];
+
+    const candidates = rawResidents
+      .map((r: any) => ({
+        id: r.id,
+        full_name: r.full_name?.trim() || r.profiles?.full_name?.trim() || 'İsimsiz Sakin',
+        phone: r.phone?.trim() || r.profiles?.phone?.trim(),
+        role: r.role,
+        user_id: r.user_id,
+        is_active: r.is_active,
+      }))
+      .filter((r: any) => r.phone && r.is_active !== false);
+
+    if (candidates.length === 0) {
+      toast.error('Bu daireye ait telefon numarası bulunamadı');
+      return;
+    }
+
+    if (candidates.length === 1) {
+      executeSendDueReminder(due, candidates[0], targetUnit);
+      return;
+    }
+
+    const remaining = due.remaining_amount ?? due.amount - (due.paid_amount || 0);
+
+    setResidentSelectModal({
+      isOpen: true,
+      title: 'Hatırlatma Gönderilecek Sakini Seçin',
+      subtitle: `${targetUnit?.block ? `${targetUnit.block} Blok ` : ''}Daire ${targetUnit?.unit_number || due.unit?.unit_number || ''} - ${due.description || 'Aidat'} (${formatCurrency(remaining)})`,
+      residents: candidates,
+      onSelect: (chosen) => executeSendDueReminder(due, chosen, targetUnit),
+    });
   };
 
   // Calculate total amount in bulk modal for single month
@@ -1571,6 +1655,16 @@ export default function DuesPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Hatırlatma Sakin Seçim Modalı */}
+      <SelectResidentModal
+        isOpen={residentSelectModal.isOpen}
+        onClose={() => setResidentSelectModal((prev) => ({ ...prev, isOpen: false }))}
+        title={residentSelectModal.title}
+        subtitle={residentSelectModal.subtitle}
+        residents={residentSelectModal.residents}
+        onSelect={residentSelectModal.onSelect}
+      />
     </div>
   );
 }

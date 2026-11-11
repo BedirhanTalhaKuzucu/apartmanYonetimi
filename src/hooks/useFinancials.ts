@@ -79,6 +79,7 @@ export function useCreateIncome() {
       income_date: string;
       category: string;
       description?: string;
+      attachment_url?: string | null;
     }) => {
       const { data, error } = await supabase
         .from('incomes')
@@ -289,6 +290,232 @@ export function useCancelExpense() {
     },
     onError: (error: Error) => {
       toast.error(error.message);
+    },
+  });
+}
+
+export function useUpdateIncome() {
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      apartment_id: string;
+      amount: number;
+      income_date: string;
+      category: string;
+      description?: string;
+      attachment_url?: string | null;
+    }) => {
+      const { data, error } = await supabase
+        .from('incomes')
+        .update({
+          amount: input.amount,
+          income_date: input.income_date,
+          category: input.category,
+          description: input.description,
+          attachment_url: input.attachment_url,
+        })
+        .eq('id', input.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      try {
+        await supabase.from('audit_log').insert({
+          apartment_id: input.apartment_id,
+          user_id: user!.id,
+          action: 'income_updated',
+          entity_type: 'income',
+          entity_id: input.id,
+          details: { amount: input.amount, category: input.category, description: input.description },
+        });
+      } catch {
+        // Audit log insert is optional
+      }
+
+      return data as Income;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['incomes'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      toast.success('Gelir kaydı güncellendi.');
+    },
+    onError: (error: Error) => {
+      toast.error(`Gelir güncellenemedi: ${error.message}`);
+    },
+  });
+}
+
+export function useDeleteIncome() {
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data: inc } = await supabase
+        .from('incomes')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      const { error } = await supabase
+        .from('incomes')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        const { error: cancelError } = await supabase
+          .from('incomes')
+          .update({ status: 'cancelled' })
+          .eq('id', id);
+        if (cancelError) throw cancelError;
+      }
+
+      if (inc && user) {
+        try {
+          await supabase.from('audit_log').insert({
+            apartment_id: inc.apartment_id,
+            user_id: user.id,
+            action: 'income_deleted',
+            entity_type: 'income',
+            entity_id: id,
+            details: { amount: inc.amount, category: inc.category, description: inc.description },
+          });
+        } catch {
+          // ignore
+        }
+      }
+
+      return inc as Income | null;
+    },
+    onSuccess: (data) => {
+      if (data?.apartment_id) {
+        queryClient.invalidateQueries({ queryKey: ['incomes', data.apartment_id] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['incomes'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      toast.success('Gelir kaydı silindi.');
+    },
+    onError: (error: Error) => {
+      toast.error(`Gelir silinemedi: ${error.message}`);
+    },
+  });
+}
+
+export function useUpdateExpense() {
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      apartment_id: string;
+      amount: number;
+      expense_date: string;
+      category: string;
+      description?: string;
+      attachment_url?: string | null;
+    }) => {
+      const { data, error } = await supabase
+        .from('expenses')
+        .update({
+          amount: input.amount,
+          expense_date: input.expense_date,
+          category: input.category,
+          description: input.description,
+          attachment_url: input.attachment_url,
+        })
+        .eq('id', input.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      try {
+        await supabase.from('audit_log').insert({
+          apartment_id: input.apartment_id,
+          user_id: user!.id,
+          action: 'expense_updated',
+          entity_type: 'expense',
+          entity_id: input.id,
+          details: { amount: input.amount, category: input.category, description: input.description },
+        });
+      } catch {
+        // Audit log insert is optional
+      }
+
+      return data as Expense;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      toast.success('Gider kaydı güncellendi.');
+    },
+    onError: (error: Error) => {
+      toast.error(`Gider güncellenemedi: ${error.message}`);
+    },
+  });
+}
+
+export function useDeleteExpense() {
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data: exp } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        const { error: cancelError } = await supabase
+          .from('expenses')
+          .update({ status: 'cancelled' })
+          .eq('id', id);
+        if (cancelError) throw cancelError;
+      }
+
+      if (exp && user) {
+        try {
+          await supabase.from('audit_log').insert({
+            apartment_id: exp.apartment_id,
+            user_id: user.id,
+            action: 'expense_deleted',
+            entity_type: 'expense',
+            entity_id: id,
+            details: { amount: exp.amount, category: exp.category, description: exp.description },
+          });
+        } catch {
+          // ignore
+        }
+      }
+
+      return exp as Expense | null;
+    },
+    onSuccess: (data) => {
+      if (data?.apartment_id) {
+        queryClient.invalidateQueries({ queryKey: ['expenses', data.apartment_id] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      toast.success('Gider kaydı silindi.');
+    },
+    onError: (error: Error) => {
+      toast.error(`Gider silinemedi: ${error.message}`);
     },
   });
 }

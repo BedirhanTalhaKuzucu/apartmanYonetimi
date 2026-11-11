@@ -133,6 +133,7 @@ export function useCreatePayment() {
       payment_date: string;
       payment_method: string;
       description?: string | null;
+      receipt_url?: string | null;
       idempotency_key: string;
     }) => {
       // Check idempotency
@@ -374,6 +375,7 @@ export function useApprovePaymentNotification() {
           payment_method: 'bank_transfer',
           description: notification.description || 'Sakin ödeme bildirimi (onaylandı)',
           receipt_no: receiptNo,
+          receipt_url: notification.receipt_url || null,
           recorded_by: user!.id,
           status: 'active',
           idempotency_key: idempotencyKey,

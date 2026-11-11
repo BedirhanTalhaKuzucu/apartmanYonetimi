@@ -1,4 +1,4 @@
-﻿import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import {
   Home,
@@ -9,8 +9,11 @@ import {
   Bell,
   Building2,
   LogOut,
+  Smartphone,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { usePWAInstall, triggerPWAInstallModal } from '@/hooks/usePWAInstall';
 
 const navItems = [
   { to: '/sakin', label: 'Ana Sayfa', icon: Home, end: true },
@@ -23,6 +26,7 @@ const navItems = [
 export default function ResidentLayout() {
   const { currentApartment, signOut } = useAuthStore();
   const navigate = useNavigate();
+  const { isStandalone } = usePWAInstall();
 
   const handleSignOut = async () => {
     await signOut();
@@ -40,7 +44,19 @@ export default function ResidentLayout() {
               {currentApartment?.name || 'Apartman Yönetim'}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {!isStandalone && (
+              <button
+                type="button"
+                onClick={triggerPWAInstallModal}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 active:bg-primary-200 rounded-lg border border-primary-200 transition-colors shadow-2xs cursor-pointer"
+                title="Uygulamayı Cihaza Yükle"
+              >
+                <Download className="h-3.5 w-3.5 text-primary-600 shrink-0" />
+                <span className="hidden sm:inline">Uygulama Olarak İndir</span>
+                <span className="sm:hidden">App İndir</span>
+              </button>
+            )}
             <NavLink
               to="/sakin/bildirimler"
               className="relative p-2 rounded-lg hover:bg-gray-100"

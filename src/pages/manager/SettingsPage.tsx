@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User, Lock, Bell, Download, LogOut, Info, Smartphone, Shield } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -7,10 +7,12 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import { subscribeToPush, isPushSupported } from '@/lib/pushNotifications';
+import { usePWAInstall, triggerPWAInstallModal } from '@/hooks/usePWAInstall';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
   const { user, profile, signOut } = useAuthStore();
+  const { isStandalone } = usePWAInstall();
   const [profileForm, setProfileForm] = useState({ full_name: '', phone: '' });
   const [passwordForm, setPasswordForm] = useState({ current: '', newPass: '', confirm: '' });
   const [saving, setSaving] = useState(false);
@@ -192,17 +194,17 @@ export default function SettingsPage() {
       </Card>
 
       {/* PWA Install */}
-      {deferredPrompt && (
+      {!isStandalone && (
         <Card className="p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Smartphone className="w-5 h-5 text-primary-600" />
-            <h2 className="font-semibold">Uygulamayı Yükle</h2>
+            <h2 className="font-semibold">Uygulama Olarak Yükle</h2>
           </div>
           <p className="text-sm text-gray-600">
-            Uygulamayı ana ekranınıza ekleyerek daha hızlı erişin.
+            Uygulamayı ana ekranınıza ekleyerek daha hızlı erişin ve bildirimleri kaçırmayın.
           </p>
-          <Button size="sm" onClick={handleInstall}>
-            <Download className="w-4 h-4 mr-1" /> Ana Ekrana Ekle
+          <Button size="sm" onClick={triggerPWAInstallModal}>
+            <Download className="w-4 h-4 mr-1" /> Yükleme Seçeneklerini Aç
           </Button>
         </Card>
       )}

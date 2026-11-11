@@ -31,6 +31,7 @@ import {
   useRecentAnnouncements,
 } from '@/hooks/useDashboard';
 import { usePayments } from '@/hooks/usePayments';
+import { usePaymentNotifications } from '@/hooks/usePaymentNotifications';
 import { useUnits } from '@/hooks/useUnits';
 import { useAnnouncements } from '@/hooks/useAnnouncements';
 import {
@@ -51,6 +52,7 @@ export default function ManagerDashboard() {
   const { data: recentPayments } = useRecentPayments();
   const { data: recentRequests } = useRecentRequests();
   const { data: recentAnnouncements } = useRecentAnnouncements();
+  const { data: paymentNotifications } = usePaymentNotifications(currentApartment?.id);
 
   if (!currentApartment) {
     return (
@@ -68,6 +70,7 @@ export default function ManagerDashboard() {
   if (statsLoading) return <LoadingSpinner />;
 
   const monthlyNet = (stats?.monthlyCollection ?? 0) - (stats?.monthlyExpenses ?? 0);
+  const pendingPaymentCount = paymentNotifications?.filter((n: any) => n.status === 'pending').length ?? 0;
 
   const statCards = [
     {
@@ -121,6 +124,37 @@ export default function ManagerDashboard() {
           Detaylı Bilanço & Rapor <ArrowRight className="w-4 h-4 ml-1.5" />
         </Button>
       </div>
+
+      {/* Pending Payment Notifications Alert Banner */}
+      {pendingPaymentCount > 0 && (
+        <div className="bg-gradient-to-r from-amber-50 via-amber-50/60 to-white border border-amber-300 border-l-4 border-l-amber-500 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 bg-amber-100 text-amber-700 rounded-lg shrink-0 mt-0.5 sm:mt-0">
+              <CreditCard className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-900">
+                  Onay Bekleyen Ödeme Bildirimi ({pendingPaymentCount})
+                </h3>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900 uppercase tracking-wide">
+                  Onay Bekliyor
+                </span>
+              </div>
+              <p className="text-xs text-gray-600 mt-1">
+                Sakinler tarafından bildirilen {pendingPaymentCount} adet ödeme teyit edilmeyi ve aidat kayıtlarına işlenmeyi bekliyor.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => navigate('/yonetici/odemeler?tab=bildirimler')}
+            className="bg-amber-600 hover:bg-amber-700 text-white shrink-0 self-end sm:self-center text-xs font-semibold shadow-sm"
+          >
+            Bildirimleri İncele <ArrowRight className="w-3.5 h-3.5 ml-1" />
+          </Button>
+        </div>
+      )}
 
       {/* Stats Grid (5 Cards: Daire, Tahsilat, Gider, Aylık Net Fark, Gecikmiş Aidat) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">

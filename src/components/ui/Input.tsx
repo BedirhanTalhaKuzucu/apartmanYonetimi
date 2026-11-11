@@ -85,26 +85,6 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
 );
 Textarea.displayName = 'Textarea';
 
-/**
- * Türkiye telefon numarası girişi.
- * Gösterimde "0 (5XX) XXX XX XX" formatını kullanır.
- */
-export const PhoneInput = forwardRef<HTMLInputElement, InputProps>(
-  ({ label = 'Telefon', ...props }, ref) => {
-    return (
-      <Input
-        ref={ref}
-        label={label}
-        type="tel"
-        placeholder="05XX XXX XX XX"
-        autoComplete="tel"
-        inputMode="tel"
-        maxLength={15}
-        {...props}
-      />
-    );
-  }
-);
-PhoneInput.displayName = 'PhoneInput';
+export { PhoneInput, type PhoneInputProps } from './PhoneInput';
 
 export default Input;

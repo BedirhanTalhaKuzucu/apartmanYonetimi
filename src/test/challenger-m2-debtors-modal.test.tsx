@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -65,7 +65,13 @@ vi.mock('@/hooks/useFinancials', () => ({
     isLoading: false,
   }),
   useCreateExpense: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateExpense: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteExpense: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCancelExpense: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateIncome: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateIncome: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteIncome: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCancelIncome: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateBatchExpenses: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -85,7 +91,16 @@ vi.mock('@/hooks/usePayments', () => ({
     isLoading: false,
   }),
   useCreatePayment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCancelPayment: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
+
+vi.mock('@/lib/debtReminder', async () => {
+  const actual = await vi.importActual<any>('@/lib/debtReminder');
+  return {
+    ...actual,
+    getSmartPortalUrl: vi.fn().mockResolvedValue('http://localhost:3000/sakin/aidatlarim'),
+  };
+});
 
 vi.mock('@/hooks/useDues', () => ({
   useUnitDues: () => ({
@@ -257,7 +272,7 @@ describe('CHALLENGER M2: Debtors Modal Empirical & Parity Verification', () => {
   });
 
   describe('2. WhatsApp URL & Action Triggers', () => {
-    it('constructs a valid https://wa.me URL with clean Turkish phone and message content', () => {
+    it('constructs a valid https://wa.me URL with clean Turkish phone and message content', async () => {
       const mockDebtors: dashboardHooks.DebtorUnit[] = [
         {
           unitId: 'unit-wa',
@@ -286,7 +301,9 @@ describe('CHALLENGER M2: Debtors Modal Empirical & Parity Verification', () => {
 
       fireEvent.click(waButton);
 
-      expect(mockWindowOpen).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(mockWindowOpen).toHaveBeenCalledTimes(1);
+      });
       const openedUrl = mockWindowOpen.mock.calls[0][0];
 
       // Verification of URL structure
@@ -299,7 +316,7 @@ describe('CHALLENGER M2: Debtors Modal Empirical & Parity Verification', () => {
       expect(messageText).toContain('Daire 5');
       expect(messageText).toContain('2.500,00');
       expect(messageText).toContain('1.000,00');
-      expect(messageText).toContain('gecikmiş');
+      expect(messageText.toLowerCase()).toContain('gecikmiş');
     });
 
     it('disables WhatsApp button and shows tooltip when resident phone is missing', () => {

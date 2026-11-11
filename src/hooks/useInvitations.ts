@@ -1,4 +1,4 @@
-﻿import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import type { Invitation } from '@/types';
@@ -93,6 +93,69 @@ export function useInvitationByToken(token: string | undefined) {
   return useQuery({
     queryKey: ['invitation-token', token],
     queryFn: async () => {
+      // 1. Önce RPC fonksiyonunu dene (SECURITY DEFINER ile anonim kullanıcı RLS'e takılmaz)
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_invitation_by_token', {
+          invite_token: token!,
+        });
+
+        if (!rpcError && rpcData) {
+          if (rpcData.error) {
+            // Süresi dolmuş veya durumu değişmiş davet
+            if (rpcData.status === 'expired' || rpcData.error.includes('dolmuş')) {
+              return {
+                id: rpcData.id || '',
+                apartment_id: rpcData.apartment_id || '',
+                unit_id: rpcData.unit_id || '',
+                token: token!,
+                resident_role: rpcData.resident_role || 'tenant',
+                status: 'expired' as const,
+                expires_at: rpcData.expires_at || new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                apartments: { name: rpcData.apartment_name || 'Apartman', address: '' },
+                units: {
+                  unit_number: rpcData.unit_number || '',
+                  block: rpcData.block || null,
+                  floor: rpcData.floor || null,
+                },
+              } as Invitation & {
+                apartments: { name: string; address: string };
+                units: { unit_number: string; block: string | null; floor: string | null };
+              };
+            }
+            throw new Error(rpcData.error);
+          }
+
+          return {
+            id: rpcData.id,
+            apartment_id: rpcData.apartment_id,
+            unit_id: rpcData.unit_id,
+            token: token!,
+            invited_name: rpcData.invited_name,
+            invited_phone: rpcData.invited_phone,
+            resident_role: rpcData.resident_role,
+            status: rpcData.status || 'pending',
+            expires_at: rpcData.expires_at,
+            created_at: rpcData.created_at || new Date().toISOString(),
+            apartments: { name: rpcData.apartment_name || 'Apartman', address: rpcData.apartment_address || '' },
+            units: {
+              unit_number: rpcData.unit_number || '',
+              block: rpcData.block || null,
+              floor: rpcData.floor || null,
+            },
+          } as Invitation & {
+            apartments: { name: string; address: string };
+            units: { unit_number: string; block: string | null; floor: string | null };
+          };
+        }
+      } catch (rpcErr: any) {
+        // RPC bilinen bir hata fırlattıysa tekrar fırlat (fonksiyon bulunamadı hatası hariç)
+        if (rpcErr.message && !rpcErr.message.includes('function') && !rpcErr.message.includes('not found')) {
+          throw rpcErr;
+        }
+      }
+
+      // 2. Yedek: Doğrudan tablo sorgusu
       const { data, error } = await supabase
         .from('invitations')
         .select('*, apartments(name, address), units(unit_number, block, floor)')
@@ -103,11 +166,14 @@ export function useInvitationByToken(token: string | undefined) {
 
       // Check expiry
       if (data.status === 'pending' && new Date(data.expires_at) < new Date()) {
-        // Mark as expired
-        await supabase
-          .from('invitations')
-          .update({ status: 'expired' })
-          .eq('id', data.id);
+        try {
+          await supabase
+            .from('invitations')
+            .update({ status: 'expired' })
+            .eq('id', data.id);
+        } catch {
+          // RLS update engellerse yoksay
+        }
         data.status = 'expired';
       }
 
@@ -135,7 +201,41 @@ export function useAcceptInvitation() {
         throw new Error('Bu davetin süresi dolmuş.');
       }
 
-      // Link user to unit
+      // 1. Önce RPC accept_invitation dene (SECURITY DEFINER ile güvenli kabul)
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('accept_invitation', {
+          invite_token: invitation.token,
+        });
+
+        if (!rpcError && rpcData) {
+          if (rpcData.error) {
+            throw new Error(rpcData.error);
+          }
+          return invitation;
+        }
+      } catch (err: any) {
+        if (err.message && !err.message.includes('function') && !err.message.includes('not found')) {
+          throw err;
+        }
+      }
+
+      // 2. İkinci RPC alternatifi: accept_invitation_with_profile
+      try {
+        const { error: rpc2Error } = await supabase.rpc('accept_invitation_with_profile', {
+          p_token: invitation.token,
+          p_user_id: user.id,
+        });
+
+        if (!rpc2Error) {
+          return invitation;
+        }
+      } catch (err: any) {
+        if (err.message && !err.message.includes('function') && !err.message.includes('not found')) {
+          throw err;
+        }
+      }
+
+      // 3. Yedek: Doğrudan tablo ekleme/güncelleme
       const { error: residentError } = await supabase
         .from('unit_residents')
         .insert({
@@ -147,30 +247,53 @@ export function useAcceptInvitation() {
           is_active: true,
         });
 
-      if (residentError) {
-        // Might already be linked
-        if (residentError.code === '23505') {
-          throw new Error('Bu daireye zaten bağlısınız.');
-        }
+      if (residentError && residentError.code !== '23505') {
         throw residentError;
       }
 
-      // Mark invitation as accepted
       const { error: updateError } = await supabase
         .from('invitations')
         .update({
           status: 'accepted',
           accepted_by: user.id,
+          accepted_at: new Date().toISOString(),
         })
         .eq('id', invitation.id);
 
-      if (updateError) throw updateError;
+      if (updateError && residentError?.code !== '23505') {
+        throw updateError;
+      }
 
       return invitation;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['invitations'] });
       queryClient.invalidateQueries({ queryKey: ['unit-residents'] });
+      queryClient.invalidateQueries({ queryKey: ['user-role'] });
+
+      // Sakin rolünü ve apartmanını authStore'da anında güncelle
+      if (user) {
+        try {
+          const { data: residentRecord } = await supabase
+            .from('unit_residents')
+            .select('*, units(*, apartments(*))')
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .limit(1)
+            .maybeSingle();
+
+          if (residentRecord) {
+            useAuthStore.getState().setUserRole('resident');
+            const unit = residentRecord.units as any;
+            if (unit?.apartments) {
+              useAuthStore.getState().setCurrentApartment(unit.apartments);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       toast.success('Davet kabul edildi! Artık daireye erişebilirsiniz.');
     },
     onError: (error: Error) => {

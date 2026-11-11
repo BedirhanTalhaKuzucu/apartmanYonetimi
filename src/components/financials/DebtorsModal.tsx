@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -14,6 +14,8 @@ import { useDebtorUnits, type DebtorUnit } from '@/hooks/useDashboard';
 import { useAuthStore } from '@/store/authStore';
 import { formatCurrency, formatPeriod } from '@/lib/format';
 import { buildWhatsAppUrl } from '@/lib/utils';
+import { buildDebtReminderText, getSmartPortalUrl } from '@/lib/debtReminder';
+import SelectResidentModal, { type SelectResidentItem } from '@/components/shared/SelectResidentModal';
 
 export interface DebtorsModalProps {
   isOpen: boolean;
@@ -22,22 +24,83 @@ export interface DebtorsModalProps {
 
 export function DebtorsModal({ isOpen, onClose }: DebtorsModalProps) {
   const navigate = useNavigate();
-  const { currentApartment } = useAuthStore();
+  const { currentApartment, user } = useAuthStore();
   const { data: debtorUnits, isLoading } = useDebtorUnits();
+  const [selectResidentModal, setSelectResidentModal] = useState<{
+    isOpen: boolean;
+    title?: string;
+    subtitle?: string;
+    residents: SelectResidentItem[];
+    onSelect: (resident: SelectResidentItem) => void;
+  }>({
+    isOpen: false,
+    residents: [],
+    onSelect: () => {},
+  });
 
   const totalDebtSum = useMemo(() => {
     return debtorUnits?.reduce((sum, item) => sum + item.totalDebt, 0) ?? 0;
   }, [debtorUnits]);
 
-  const handleWhatsApp = (item: DebtorUnit) => {
-    if (!item.residentPhone) return;
-    const waText = `Sayın ${item.residentName || 'Sakinimiz'}, ${currentApartment?.name || 'Apartman'} Daire ${item.unitNumber} için toplam ${formatCurrency(item.totalDebt)} tutarında bekleyen borcunuz bulunmaktadır.${
-      item.overdueDebt > 0
-        ? ` Bunun ${formatCurrency(item.overdueDebt)} tutarı gecikmiş durumdadır.`
-        : ''
-    } Ödemenizi rica eder, iyi günler dileriz.`;
-    const url = buildWhatsAppUrl(item.residentPhone, waText);
+  const executeWhatsApp = async (
+    item: DebtorUnit,
+    target: { full_name: string; phone?: string | null; role?: string; user_id?: string | null }
+  ) => {
+    if (!target.phone) return;
+
+    let smartLink: string | undefined;
+    try {
+      smartLink = await getSmartPortalUrl({
+        apartmentId: currentApartment!.id,
+        unitId: item.unitId,
+        userId: target.user_id,
+        residentName: target.full_name,
+        residentPhone: target.phone,
+        residentRole:
+          target.role === 'Ev Sahibi' || target.role === 'owner' ? 'owner' : 'tenant',
+        createdBy: user?.id,
+      });
+    } catch {
+      // Fallback url
+      smartLink = `${window.location.origin}/sakin/aidatlarim`;
+    }
+
+    const waText = buildDebtReminderText({
+      apartmentName: currentApartment?.name || 'Apartman',
+      unitNumber: item.unitNumber,
+      block: item.block,
+      residentName: target.full_name,
+      totalDebt: item.totalDebt,
+      overdueDebt: item.overdueDebt,
+      items: item.items || [],
+      smartLink,
+    });
+
+    const url = buildWhatsAppUrl(target.phone, waText);
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleWhatsApp = (item: DebtorUnit) => {
+    const candidates = item.residents || [];
+
+    if (candidates.length > 1) {
+      setSelectResidentModal({
+        isOpen: true,
+        title: 'Borç Hatırlatması Gönderilecek Sakin',
+        subtitle: `${item.block ? `${item.block} Blok ` : ''}Daire ${item.unitNumber} - Toplam Borç: ${formatCurrency(item.totalDebt)}`,
+        residents: candidates,
+        onSelect: (chosen) => executeWhatsApp(item, chosen),
+      });
+      return;
+    }
+
+    const target = candidates[0] || {
+      full_name: item.residentName,
+      phone: item.residentPhone,
+      role: item.residentRole,
+      user_id: item.userId,
+    };
+    executeWhatsApp(item, target);
   };
 
   const handleQuickCollection = (unitId: string) => {
@@ -51,6 +114,7 @@ export function DebtorsModal({ isOpen, onClose }: DebtorsModalProps) {
   };
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={onClose}
@@ -222,6 +286,16 @@ export function DebtorsModal({ isOpen, onClose }: DebtorsModalProps) {
         )}
       </div>
     </Modal>
+
+    <SelectResidentModal
+      isOpen={selectResidentModal.isOpen}
+      onClose={() => setSelectResidentModal((prev) => ({ ...prev, isOpen: false }))}
+      title={selectResidentModal.title}
+      subtitle={selectResidentModal.subtitle}
+      residents={selectResidentModal.residents}
+      onSelect={selectResidentModal.onSelect}
+    />
+    </>
   );
 }
 

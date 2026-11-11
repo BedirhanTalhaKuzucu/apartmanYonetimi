@@ -32,8 +32,9 @@ export default function PaymentsPage() {
 
   const unitParam = searchParams.get('unit');
   const actionParam = searchParams.get('action');
+  const tabParam = searchParams.get('tab');
 
-  const [activeTab, setActiveTab] = useState(actionParam === 'create' ? 'odemeler' : 'odemeler');
+  const [activeTab, setActiveTab] = useState(tabParam === 'bildirimler' ? 'bildirimler' : 'odemeler');
   const [showCreate, setShowCreate] = useState(actionParam === 'create');
   const [showCancel, setShowCancel] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -50,8 +51,12 @@ export default function PaymentsPage() {
     description: '',
   });
 
-  // URL üzerinden action=create ve unit parametresi gelirse daireyi ve modalı hazırla
+  // URL üzerinden action=create, tab ve unit parametresi gelirse modalı ve sekmeyi hazırla
   useEffect(() => {
+    const tParam = searchParams.get('tab');
+    if (tParam === 'bildirimler' || tParam === 'odemeler') {
+      setActiveTab(tParam);
+    }
     const uParam = searchParams.get('unit');
     const aParam = searchParams.get('action');
     if (aParam === 'create') {

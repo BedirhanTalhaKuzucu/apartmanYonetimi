@@ -28,6 +28,13 @@ import {
   ChevronRight,
   Building,
   MoreVertical,
+  Edit2,
+  Trash2,
+  FileText,
+  XCircle,
+  X,
+  Eye,
+  ExternalLink,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -45,7 +52,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUnits } from '@/hooks/useUnits';
-import { usePayments, useCreatePayment } from '@/hooks/usePayments';
+import { usePayments, useCreatePayment, useCancelPayment } from '@/hooks/usePayments';
 import { useUnitDues } from '@/hooks/useDues';
 import {
   useFinancialSummary,
@@ -54,7 +61,13 @@ import {
   useCreateIncome,
   useCreateExpense,
   useCreateBatchExpenses,
+  useUpdateExpense,
+  useDeleteExpense,
+  useUpdateIncome,
+  useDeleteIncome,
 } from '@/hooks/useFinancials';
+import FileUpload from '@/components/shared/FileUpload';
+import type { Income, Expense } from '@/types';
 import toast from 'react-hot-toast';
 
 const EXPENSE_CATEGORIES = [
@@ -310,6 +323,9 @@ export default function FinancialsPage() {
     categoryBadge: string;
     methodBadge?: string;
     receiptNo?: string | null;
+    attachmentUrl?: string | null;
+    rawIncome?: Income;
+    rawPayment?: any;
   }
 
   const combinedIncomes = useMemo(() => {
@@ -342,6 +358,8 @@ export default function FinancialsPage() {
           categoryBadge: 'Aidat Tahsilatı',
           methodBadge: methodText,
           receiptNo: p.receipt_no,
+          attachmentUrl: p.receipt_url || null,
+          rawPayment: p,
         });
       }
     }
@@ -356,6 +374,8 @@ export default function FinancialsPage() {
           title: inc.category,
           subtitle: inc.description || undefined,
           categoryBadge: inc.category,
+          attachmentUrl: inc.attachment_url || null,
+          rawIncome: inc,
         });
       }
     }
@@ -375,9 +395,47 @@ export default function FinancialsPage() {
   }, [combinedIncomes, incomeFilterType]);
 
   const createIncome = useCreateIncome();
+  const updateIncome = useUpdateIncome();
+  const deleteIncome = useDeleteIncome();
   const createPayment = useCreatePayment();
+  const cancelPayment = useCancelPayment();
   const createExpense = useCreateExpense();
+  const updateExpense = useUpdateExpense();
+  const deleteExpense = useDeleteExpense();
   const createBatchExpenses = useCreateBatchExpenses();
+
+  // ── Expense Edit & Delete State ──
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [deletingExpense, setDeletingExpense] = useState<Expense | null>(null);
+  const [editExpenseForm, setEditExpenseForm] = useState({
+    amount: '',
+    expense_date: '',
+    category: 'Bakım',
+    description: '',
+    attachment_url: null as string | null,
+  });
+
+  // ── Income Edit & Delete State ──
+  const [editingIncome, setEditingIncome] = useState<Income | null>(null);
+  const [deletingIncome, setDeletingIncome] = useState<Income | null>(null);
+  const [editIncomeForm, setEditIncomeForm] = useState({
+    amount: '',
+    income_date: '',
+    category: 'Diğer',
+    description: '',
+    attachment_url: null as string | null,
+  });
+
+  // ── Belge / Dekont Önizleme State ──
+  const [previewDoc, setPreviewDoc] = useState<{ url: string; title: string } | null>(null);
+
+  const openDocPreview = (url: string, title: string) => {
+    setPreviewDoc({ url, title });
+  };
+
+  // ── Payment Cancel State (For Dues Incomes) ──
+  const [cancellingPayment, setCancellingPayment] = useState<any | null>(null);
+  const [paymentCancelReason, setPaymentCancelReason] = useState('');
 
   const [incomeSource, setIncomeSource] = useState<'unit' | 'general'>('unit');
   const [selectedUnitId, setSelectedUnitId] = useState('');
@@ -437,6 +495,7 @@ export default function FinancialsPage() {
     income_date: new Date().toISOString().split('T')[0],
     category: 'Diğer',
     description: '',
+    attachment_url: null as string | null,
   });
 
   const [expenseCreationType, setExpenseCreationType] = useState<'one_time' | 'recurring'>('one_time');
@@ -445,6 +504,7 @@ export default function FinancialsPage() {
     expense_date: new Date().toISOString().split('T')[0],
     category: 'Bakım',
     description: '',
+    attachment_url: null as string | null,
     startMonth: currentMonth,
     startYear: currentYear,
     endMonth: currentMonth === 0 ? 11 : currentMonth - 1,
@@ -526,6 +586,7 @@ export default function FinancialsPage() {
           payment_date: incomeForm.income_date,
           payment_method: paymentMethod,
           description: incomeForm.description.trim() || undefined,
+          receipt_url: incomeForm.attachment_url || undefined,
           idempotency_key: generateIdempotencyKey(),
         });
         toast.success('Daire tahsilatı başarıyla kaydedildi.');
@@ -538,6 +599,7 @@ export default function FinancialsPage() {
           income_date: new Date().toISOString().split('T')[0],
           category: 'Diğer',
           description: '',
+          attachment_url: null,
         });
       } catch (err: any) {
         toast.error(err.message || 'Ödeme kaydedilemedi');
@@ -550,6 +612,7 @@ export default function FinancialsPage() {
           income_date: incomeForm.income_date,
           category: incomeForm.category,
           description: incomeForm.description.trim() || undefined,
+          attachment_url: incomeForm.attachment_url || undefined,
         });
         setShowAddIncome(false);
         setIncomeForm({
@@ -557,6 +620,7 @@ export default function FinancialsPage() {
           income_date: new Date().toISOString().split('T')[0],
           category: 'Diğer',
           description: '',
+          attachment_url: null,
         });
       } catch (err: any) {
         toast.error(err.message || 'Bir hata oluştu');
@@ -618,6 +682,7 @@ export default function FinancialsPage() {
           expense_date: expenseForm.expense_date,
           category: expenseForm.category,
           description: expenseForm.description.trim(),
+          attachment_url: expenseForm.attachment_url || undefined,
         });
 
         // If distributed, insert dues for each target unit
@@ -660,6 +725,7 @@ export default function FinancialsPage() {
         expense_date: new Date().toISOString().split('T')[0],
         category: 'Bakım',
         description: '',
+        attachment_url: null,
         startMonth: currentMonth,
         startYear: currentYear,
         endMonth: currentMonth === 0 ? 11 : currentMonth - 1,
@@ -675,6 +741,158 @@ export default function FinancialsPage() {
       toast.error(err.message || 'Gider kaydedilirken hata oluştu');
     } finally {
       setIsSubmittingExpense(false);
+    }
+  };
+
+  // ── Gider Düzenleme & Silme İşleyicileri ──
+  const openEditExpense = (exp: Expense) => {
+    setEditingExpense(exp);
+    setEditExpenseForm({
+      amount: exp.amount.toString(),
+      expense_date: exp.expense_date,
+      category: exp.category,
+      description: exp.description || '',
+      attachment_url: exp.attachment_url || null,
+    });
+  };
+
+  const handleSaveEditExpense = async () => {
+    if (!editingExpense) return;
+    if (isDateInLockedPeriod(editExpenseForm.expense_date)) {
+      toast.error('Bu tarihin ait olduğu dönem kilitlidir. Değişiklik yapmak için önce dönem kilidini açmalısınız.');
+      return;
+    }
+    const amt = parseFloat(editExpenseForm.amount);
+    if (!editExpenseForm.amount || isNaN(amt) || amt <= 0) {
+      toast.error('Geçerli bir tutar girin');
+      return;
+    }
+    if (!editExpenseForm.description.trim()) {
+      toast.error('Gider açıklaması zorunludur');
+      return;
+    }
+
+    try {
+      await updateExpense.mutateAsync({
+        id: editingExpense.id,
+        apartment_id: editingExpense.apartment_id,
+        amount: amt,
+        expense_date: editExpenseForm.expense_date,
+        category: editExpenseForm.category,
+        description: editExpenseForm.description.trim(),
+        attachment_url: editExpenseForm.attachment_url,
+      });
+      setEditingExpense(null);
+    } catch {
+      // toast is handled in mutation hook
+    }
+  };
+
+  const openDeleteExpense = (exp: Expense) => {
+    setDeletingExpense(exp);
+  };
+
+  const handleConfirmDeleteExpense = async () => {
+    if (!deletingExpense) return;
+    if (isDateInLockedPeriod(deletingExpense.expense_date)) {
+      toast.error('Bu tarihin ait olduğu dönem kilitlidir. Değişiklik yapmak için önce dönem kilidini açmalısınız.');
+      return;
+    }
+
+    try {
+      await deleteExpense.mutateAsync(deletingExpense.id);
+      setDeletingExpense(null);
+    } catch {
+      // toast is handled in mutation hook
+    }
+  };
+
+  // ── Gelir Düzenleme & Silme İşleyicileri ──
+  const openEditIncome = (inc: Income) => {
+    setEditingIncome(inc);
+    setEditIncomeForm({
+      amount: inc.amount.toString(),
+      income_date: inc.income_date,
+      category: inc.category,
+      description: inc.description || '',
+      attachment_url: inc.attachment_url || null,
+    });
+  };
+
+  const handleSaveEditIncome = async () => {
+    if (!editingIncome) return;
+    if (isDateInLockedPeriod(editIncomeForm.income_date)) {
+      toast.error('Bu tarihin ait olduğu dönem kilitlidir. Değişiklik yapmak için önce dönem kilidini açmalısınız.');
+      return;
+    }
+    const amt = parseFloat(editIncomeForm.amount);
+    if (!editIncomeForm.amount || isNaN(amt) || amt <= 0) {
+      toast.error('Geçerli bir tutar girin');
+      return;
+    }
+
+    try {
+      await updateIncome.mutateAsync({
+        id: editingIncome.id,
+        apartment_id: editingIncome.apartment_id,
+        amount: amt,
+        income_date: editIncomeForm.income_date,
+        category: editIncomeForm.category,
+        description: editIncomeForm.description.trim() || undefined,
+        attachment_url: editIncomeForm.attachment_url,
+      });
+      setEditingIncome(null);
+    } catch {
+      // toast is handled in mutation hook
+    }
+  };
+
+  const openDeleteIncome = (inc: Income) => {
+    setDeletingIncome(inc);
+  };
+
+  const handleConfirmDeleteIncome = async () => {
+    if (!deletingIncome) return;
+    if (isDateInLockedPeriod(deletingIncome.income_date)) {
+      toast.error('Bu tarihin ait olduğu dönem kilitlidir. Değişiklik yapmak için önce dönem kilidini açmalısınız.');
+      return;
+    }
+
+    try {
+      await deleteIncome.mutateAsync(deletingIncome.id);
+      setDeletingIncome(null);
+    } catch {
+      // toast is handled in mutation hook
+    }
+  };
+
+  // ── Aidat Tahsilatı İptal İşleyicileri ──
+  const openCancelPayment = (p: any) => {
+    setCancellingPayment(p);
+    setPaymentCancelReason('');
+  };
+
+  const handleConfirmCancelPayment = async () => {
+    if (!cancellingPayment) return;
+    if (isDateInLockedPeriod(cancellingPayment.payment_date)) {
+      toast.error('Bu tarihin ait olduğu dönem kilitlidir. Değişiklik yapmak için önce dönem kilidini açmalısınız.');
+      return;
+    }
+    if (!paymentCancelReason.trim()) {
+      toast.error('İptal gerekçesi zorunludur');
+      return;
+    }
+
+    try {
+      await cancelPayment.mutateAsync({
+        id: cancellingPayment.id,
+        cancellation_reason: paymentCancelReason.trim(),
+      });
+      toast.success('Ödeme iptal edildi');
+      setCancellingPayment(null);
+      setPaymentCancelReason('');
+    } catch {
+      // toast is handled in mutation hook
     }
   };
 
@@ -1356,22 +1574,67 @@ export default function FinancialsPage() {
           ) : expenses && expenses.length > 0 ? (
             <div className="space-y-2">
               {expenses.map((exp: any) => (
-                <Card key={exp.id} className="p-3.5 hover:border-gray-300 transition-colors">
+                <Card
+                  key={exp.id}
+                  as="div"
+                  onClick={() => openEditExpense(exp)}
+                  className="p-3.5 hover:border-gray-300 hover:shadow-xs transition-all group cursor-pointer"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant="danger">{exp.category}</Badge>
                         <span className="text-xs text-gray-500">
                           {formatShortDate(exp.expense_date)}
                         </span>
+                        {exp.attachment_url && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDocPreview(exp.attachment_url, `${exp.category} Belgesi / Faturası`);
+                            }}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                            title="Fatura / Fiş Belgesini Görüntüle"
+                          >
+                            <FileText className="w-3 h-3" />
+                            <span>Belge</span>
+                          </button>
+                        )}
                       </div>
                       <p className="text-sm font-medium text-gray-900 mt-1 truncate">
                         {exp.description}
                       </p>
                     </div>
-                    <span className="text-base font-bold text-red-600 shrink-0">
-                      -{formatCurrency(exp.amount)}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-base font-bold text-red-600">
+                        -{formatCurrency(exp.amount)}
+                      </span>
+                      <div className="flex items-center gap-1 ml-1 sm:opacity-90 group-hover:opacity-100">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditExpense(exp);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                          title="Gideri Düzenle"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteExpense(exp);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          title="Gideri Sil"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </Card>
               ))}
@@ -1439,7 +1702,18 @@ export default function FinancialsPage() {
           ) : filteredIncomes.length > 0 ? (
             <div className="space-y-2">
               {filteredIncomes.map((item) => (
-                <Card key={`${item.type}-${item.id}`} className="p-3.5 hover:border-gray-300 transition-colors">
+                <Card
+                  key={`${item.type}-${item.id}`}
+                  as="div"
+                  onClick={() => {
+                    if (item.type === 'other_income' && item.rawIncome) {
+                      openEditIncome(item.rawIncome);
+                    } else if (item.type === 'due_payment' && item.rawPayment) {
+                      openCancelPayment(item.rawPayment);
+                    }
+                  }}
+                  className="p-3.5 hover:border-gray-300 hover:shadow-xs transition-all group cursor-pointer"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1454,6 +1728,23 @@ export default function FinancialsPage() {
                         <span className="text-xs text-gray-500">
                           {formatShortDate(item.date)}
                         </span>
+                        {item.attachmentUrl && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDocPreview(
+                                item.attachmentUrl!,
+                                `${item.title} - ${item.type === 'due_payment' ? 'Ödeme Dekontu' : 'Belge / Dekont'}`
+                              );
+                            }}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                            title="Dekont / Belgeyi Görüntüle"
+                          >
+                            <FileText className="w-3 h-3 text-emerald-600" />
+                            <span>Dekont</span>
+                          </button>
+                        )}
                       </div>
                       <p className="text-sm font-medium text-gray-900 mt-1 truncate">
                         {item.title}
@@ -1464,9 +1755,51 @@ export default function FinancialsPage() {
                         </p>
                       )}
                     </div>
-                    <span className="text-base font-bold text-green-600 shrink-0">
-                      +{formatCurrency(item.amount)}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-base font-bold text-green-600">
+                        +{formatCurrency(item.amount)}
+                      </span>
+                      <div className="flex items-center gap-1 ml-1 sm:opacity-90 group-hover:opacity-100">
+                        {item.type === 'other_income' && item.rawIncome ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditIncome(item.rawIncome!);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                              title="Geliri Düzenle"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDeleteIncome(item.rawIncome!);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Geliri Sil"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : item.type === 'due_payment' && item.rawPayment ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openCancelPayment(item.rawPayment);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Ödemeyi İptal Et"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 </Card>
               ))}
@@ -1695,6 +2028,37 @@ export default function FinancialsPage() {
               placeholder="Örn: Asansör periyodik bakım ücreti, Makbuz No: 1234"
             />
           </div>
+
+          {/* Fatura / Fiş Belgesi */}
+          {expenseCreationType === 'one_time' && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-gray-700">
+                  Fatura / Fiş Belgesi (İsteğe bağlı)
+                </label>
+                {expenseForm.attachment_url && (
+                  <button
+                    type="button"
+                    onClick={() => openDocPreview(expenseForm.attachment_url!, 'Fatura / Fiş Belgesi')}
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Görüntüle</span>
+                  </button>
+                )}
+              </div>
+              <FileUpload
+                bucket="attachments"
+                folder="expenses"
+                accept="all"
+                currentUrl={expenseForm.attachment_url}
+                onUpload={(url) => setExpenseForm((prev) => ({ ...prev, attachment_url: url }))}
+                onRemove={() => setExpenseForm((prev) => ({ ...prev, attachment_url: null }))}
+                onPreviewClick={(url) => openDocPreview(url, 'Fatura / Fiş Belgesi')}
+                label="Fatura / Fiş Görseli veya PDF Yükle"
+              />
+            </div>
+          )}
 
           {/* ── DAİRELERE DAĞITIM SEÇENEĞİ (OPSİYONEL) ── */}
           {expenseCreationType === 'one_time' && (
@@ -2000,6 +2364,35 @@ export default function FinancialsPage() {
                   placeholder="Örn: Aidat tahsilatı, Dekont no: 8842"
                 />
               </div>
+
+              {/* Dekont / Makbuz Belgesi */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">
+                    Dekont / Makbuz Belgesi (İsteğe bağlı)
+                  </label>
+                  {incomeForm.attachment_url && (
+                    <button
+                      type="button"
+                      onClick={() => openDocPreview(incomeForm.attachment_url!, 'Ödeme Dekontu / Makbuz')}
+                      className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-800 font-medium cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Görüntüle</span>
+                    </button>
+                  )}
+                </div>
+                <FileUpload
+                  bucket="attachments"
+                  folder="incomes"
+                  accept="all"
+                  currentUrl={incomeForm.attachment_url}
+                  onUpload={(url) => setIncomeForm((prev) => ({ ...prev, attachment_url: url }))}
+                  onRemove={() => setIncomeForm((prev) => ({ ...prev, attachment_url: null }))}
+                  onPreviewClick={(url) => openDocPreview(url, 'Ödeme Dekontu / Makbuz')}
+                  label="Dekont / Makbuz Görseli veya PDF Yükle"
+                />
+              </div>
             </div>
           ) : (
             <div className="space-y-3.5 animate-fade-in">
@@ -2090,6 +2483,35 @@ export default function FinancialsPage() {
                   placeholder="Örn: Otopark kira bedeli, Tahsilat makbuzu 45"
                 />
               </div>
+
+              {/* Makbuz / Belge */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">
+                    Makbuz / Belge (İsteğe bağlı)
+                  </label>
+                  {incomeForm.attachment_url && (
+                    <button
+                      type="button"
+                      onClick={() => openDocPreview(incomeForm.attachment_url!, `${incomeForm.category} Belgesi`)}
+                      className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-800 font-medium cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Görüntüle</span>
+                    </button>
+                  )}
+                </div>
+                <FileUpload
+                  bucket="attachments"
+                  folder="incomes"
+                  accept="all"
+                  currentUrl={incomeForm.attachment_url}
+                  onUpload={(url) => setIncomeForm((prev) => ({ ...prev, attachment_url: url }))}
+                  onRemove={() => setIncomeForm((prev) => ({ ...prev, attachment_url: null }))}
+                  onPreviewClick={(url) => openDocPreview(url, `${incomeForm.category} Belgesi`)}
+                  label="Gelir Makbuzu veya Belge Yükle"
+                />
+              </div>
             </div>
           )}
 
@@ -2115,6 +2537,428 @@ export default function FinancialsPage() {
           onClose={() => setShowDebtorsModal(false)}
         />
       )}
+
+      {/* ── GİDER DÜZENLEME MODALI ── */}
+      <Modal
+        isOpen={!!editingExpense}
+        onClose={() => setEditingExpense(null)}
+        title="Gider Kaydını Düzenle"
+      >
+        {editingExpense && (
+          <div className="space-y-4 w-full min-w-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+              <div className="w-full min-w-0">
+                <Input
+                  label="Tutar (₺) *"
+                  type="number"
+                  placeholder="0.00"
+                  value={editExpenseForm.amount}
+                  onChange={(e) => setEditExpenseForm({ ...editExpenseForm, amount: e.target.value })}
+                />
+              </div>
+              <div className="w-full min-w-0">
+                <Input
+                  label="Gider Tarihi *"
+                  type="date"
+                  value={editExpenseForm.expense_date}
+                  onChange={(e) => setEditExpenseForm({ ...editExpenseForm, expense_date: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <Select
+                label="Kategori *"
+                value={editExpenseForm.category}
+                onChange={(e) => setEditExpenseForm({ ...editExpenseForm, category: e.target.value })}
+                options={EXPENSE_CATEGORIES.map((c) => ({ value: c, label: c }))}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <Input
+                label="Açıklama *"
+                value={editExpenseForm.description}
+                onChange={(e) => setEditExpenseForm({ ...editExpenseForm, description: e.target.value })}
+                placeholder="Gider açıklaması"
+              />
+            </div>
+
+            {/* Fatura / Fiş Belgesi */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-gray-700">
+                  Fatura / Fiş Belgesi (İsteğe bağlı)
+                </label>
+                {editExpenseForm.attachment_url && (
+                  <button
+                    type="button"
+                    onClick={() => openDocPreview(editExpenseForm.attachment_url!, `${editExpenseForm.category} Belgesi`)}
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Belgeyi Görüntüle</span>
+                  </button>
+                )}
+              </div>
+              <FileUpload
+                bucket="attachments"
+                folder="expenses"
+                accept="all"
+                currentUrl={editExpenseForm.attachment_url}
+                onUpload={(url) => setEditExpenseForm((prev) => ({ ...prev, attachment_url: url }))}
+                onRemove={() => setEditExpenseForm((prev) => ({ ...prev, attachment_url: null }))}
+                onPreviewClick={(url) => openDocPreview(url, `${editExpenseForm.category} Belgesi`)}
+                label="Fatura / Fiş Görseli veya PDF Yükle"
+              />
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 border-t border-gray-100 [&>*]:w-full sm:[&>*]:w-auto">
+              <Button variant="outline" onClick={() => setEditingExpense(null)}>
+                İptal
+              </Button>
+              <Button
+                onClick={handleSaveEditExpense}
+                loading={updateExpense.isPending}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Değişiklikleri Kaydet
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── GİDER SİLME ONAY MODALI ── */}
+      <Modal
+        isOpen={!!deletingExpense}
+        onClose={() => setDeletingExpense(null)}
+        title="Gider Kaydını Sil"
+      >
+        {deletingExpense && (
+          <div className="space-y-4">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Bu gider kaydını silmek istediğinize emin misiniz?</p>
+                <p className="text-xs text-red-700 mt-0.5">
+                  Bu işlem kaydı mali kayıtlardan kaldıracak ve apartman bakiye hesaplamalarını güncelleyecektir.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Kategori:</span>
+                <span className="font-medium text-gray-900">{deletingExpense.category}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Tarih:</span>
+                <span className="font-medium text-gray-900">{formatShortDate(deletingExpense.expense_date)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Tutar:</span>
+                <span className="font-bold text-red-600">-{formatCurrency(deletingExpense.amount)}</span>
+              </div>
+              {deletingExpense.description && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Açıklama:</span>
+                  <span className="font-medium text-gray-900 text-right truncate max-w-[200px]">{deletingExpense.description}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 border-t border-gray-100 [&>*]:w-full sm:[&>*]:w-auto">
+              <Button variant="outline" onClick={() => setDeletingExpense(null)}>
+                Vazgeç
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleConfirmDeleteExpense}
+                loading={deleteExpense.isPending}
+              >
+                Evet, Kaydı Sil
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── GELİR DÜZENLEME MODALI ── */}
+      <Modal
+        isOpen={!!editingIncome}
+        onClose={() => setEditingIncome(null)}
+        title="Gelir Kaydını Düzenle"
+      >
+        {editingIncome && (
+          <div className="space-y-4 w-full min-w-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+              <div className="w-full min-w-0">
+                <Input
+                  label="Tutar (₺) *"
+                  type="number"
+                  placeholder="0.00"
+                  value={editIncomeForm.amount}
+                  onChange={(e) => setEditIncomeForm({ ...editIncomeForm, amount: e.target.value })}
+                />
+              </div>
+              <div className="w-full min-w-0">
+                <Input
+                  label="Tarih *"
+                  type="date"
+                  value={editIncomeForm.income_date}
+                  onChange={(e) => setEditIncomeForm({ ...editIncomeForm, income_date: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <Select
+                label="Kategori *"
+                value={editIncomeForm.category}
+                onChange={(e) => setEditIncomeForm({ ...editIncomeForm, category: e.target.value })}
+                options={INCOME_CATEGORIES.map((c) => ({ value: c, label: c }))}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <Input
+                label="Açıklama"
+                value={editIncomeForm.description}
+                onChange={(e) => setEditIncomeForm({ ...editIncomeForm, description: e.target.value })}
+                placeholder="Gelir açıklaması"
+              />
+            </div>
+
+            {/* Gelir Makbuzu / Dekont Belgesi */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-gray-700">
+                  Gelir Makbuzu / Dekont (İsteğe bağlı)
+                </label>
+                {editIncomeForm.attachment_url && (
+                  <button
+                    type="button"
+                    onClick={() => openDocPreview(editIncomeForm.attachment_url!, `${editIncomeForm.category} Dekontu / Belgesi`)}
+                    className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-800 font-medium cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Dekontu Görüntüle</span>
+                  </button>
+                )}
+              </div>
+              <FileUpload
+                bucket="attachments"
+                folder="incomes"
+                accept="all"
+                currentUrl={editIncomeForm.attachment_url}
+                onUpload={(url) => setEditIncomeForm((prev) => ({ ...prev, attachment_url: url }))}
+                onRemove={() => setEditIncomeForm((prev) => ({ ...prev, attachment_url: null }))}
+                onPreviewClick={(url) => openDocPreview(url, `${editIncomeForm.category} Dekontu / Belgesi`)}
+                label="Dekont / Belge Görseli veya PDF Yükle"
+              />
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 border-t border-gray-100 [&>*]:w-full sm:[&>*]:w-auto">
+              <Button variant="outline" onClick={() => setEditingIncome(null)}>
+                İptal
+              </Button>
+              <Button
+                onClick={handleSaveEditIncome}
+                loading={updateIncome.isPending}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                Değişiklikleri Kaydet
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── GELİR SİLME ONAY MODALI ── */}
+      <Modal
+        isOpen={!!deletingIncome}
+        onClose={() => setDeletingIncome(null)}
+        title="Gelir Kaydını Sil"
+      >
+        {deletingIncome && (
+          <div className="space-y-4">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Bu gelir kaydını silmek istediğinize emin misiniz?</p>
+                <p className="text-xs text-red-700 mt-0.5">
+                  Bu işlem kaydı gelirler listesinden ve apartman bakiyesinden düşecektir.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Kategori:</span>
+                <span className="font-medium text-gray-900">{deletingIncome.category}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Tarih:</span>
+                <span className="font-medium text-gray-900">{formatShortDate(deletingIncome.income_date)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Tutar:</span>
+                <span className="font-bold text-green-600">+{formatCurrency(deletingIncome.amount)}</span>
+              </div>
+              {deletingIncome.description && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Açıklama:</span>
+                  <span className="font-medium text-gray-900 text-right truncate max-w-[200px]">{deletingIncome.description}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 border-t border-gray-100 [&>*]:w-full sm:[&>*]:w-auto">
+              <Button variant="outline" onClick={() => setDeletingIncome(null)}>
+                Vazgeç
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleConfirmDeleteIncome}
+                loading={deleteIncome.isPending}
+              >
+                Evet, Kaydı Sil
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── AİDAT ÖDEMESİ İPTAL MODALI ── */}
+      <Modal
+        isOpen={!!cancellingPayment}
+        onClose={() => setCancellingPayment(null)}
+        title="Aidat Ödemesini İptal Et"
+      >
+        {cancellingPayment && (
+          <div className="space-y-4">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900 flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Bu aidat tahsilat kaydını iptal etmek istediğinize emin misiniz?</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Ödeme iptal edilecek, tahakkuk eden borç tekrar ödenmemiş duruma gelecektir.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Daire:</span>
+                <span className="font-medium text-gray-900">
+                  {cancellingPayment.units
+                    ? `${cancellingPayment.units.block ? `${cancellingPayment.units.block} Blok ` : ''}Daire ${cancellingPayment.units.unit_number}`
+                    : 'Daire'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Tutar:</span>
+                <span className="font-bold text-gray-900">{formatCurrency(cancellingPayment.amount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Tarih:</span>
+                <span className="font-medium text-gray-900">{formatShortDate(cancellingPayment.payment_date)}</span>
+              </div>
+              {cancellingPayment.receipt_no && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Makbuz No:</span>
+                  <span className="font-mono text-gray-900">{cancellingPayment.receipt_no}</span>
+                </div>
+              )}
+              {cancellingPayment.receipt_url && (
+                <div className="flex justify-between items-center pt-1 border-t border-gray-200">
+                  <span className="text-gray-500">Ödeme Dekontu:</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openDocPreview(
+                        cancellingPayment.receipt_url,
+                        `${
+                          cancellingPayment.units
+                            ? `${cancellingPayment.units.block ? `${cancellingPayment.units.block} Blok ` : ''}Daire ${cancellingPayment.units.unit_number} `
+                            : ''
+                        }Ödeme Dekontu`
+                      )
+                    }
+                    className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Dekontu Görüntüle</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <Input
+              label="İptal Gerekçesi *"
+              placeholder="Örn: Yanlış tutar girildi, mükerrer kayıt..."
+              value={paymentCancelReason}
+              onChange={(e) => setPaymentCancelReason(e.target.value)}
+            />
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 border-t border-gray-100 [&>*]:w-full sm:[&>*]:w-auto">
+              <Button variant="outline" onClick={() => setCancellingPayment(null)}>
+                Vazgeç
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleConfirmCancelPayment}
+                loading={cancelPayment.isPending}
+              >
+                Ödemeyi İptal Et
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── BELGE / DEKONT GÖRÜNTÜLEYİCİ LIGHTBOX MODAL ── */}
+      <Modal
+        isOpen={!!previewDoc}
+        onClose={() => setPreviewDoc(null)}
+        title={previewDoc?.title || 'Belge / Görsel Görüntüleyici'}
+        size="lg"
+      >
+        {previewDoc && (
+          <div className="space-y-3.5">
+            <div className="max-h-[70vh] overflow-auto flex items-center justify-center bg-gray-900/5 rounded-xl p-2 border border-gray-200">
+              {previewDoc.url.toLowerCase().endsWith('.pdf') ? (
+                <iframe
+                  src={previewDoc.url}
+                  title={previewDoc.title}
+                  className="w-full h-[65vh] rounded-lg border-0"
+                />
+              ) : (
+                <img
+                  src={previewDoc.url}
+                  alt={previewDoc.title}
+                  className="max-h-[65vh] max-w-full object-contain rounded-lg shadow-sm"
+                />
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t border-gray-100">
+              <a
+                href={previewDoc.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>Yeni Sekmede / Tam Boyutta Aç</span>
+              </a>
+              <Button variant="outline" size="sm" onClick={() => setPreviewDoc(null)}>
+                Kapat
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

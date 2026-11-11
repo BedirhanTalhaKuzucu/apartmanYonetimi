@@ -1,4 +1,4 @@
-﻿import { parsePhoneNumberFromString, type PhoneNumber } from 'libphonenumber-js';
+import { parsePhoneNumberFromString, type PhoneNumber } from 'libphonenumber-js';
 
 const TURKEY_TZ = 'Europe/Istanbul';
 
@@ -73,6 +73,9 @@ export function parsePhoneToE164(phone: string): string {
   const parsed = parsePhoneNumberFromString(cleaned, 'TR');
   if (parsed && parsed.isValid()) {
     return parsed.format('E.164');
+  }
+  if (cleaned.startsWith('+') && cleaned.length >= 8) {
+    return cleaned;
   }
   return '';
 }

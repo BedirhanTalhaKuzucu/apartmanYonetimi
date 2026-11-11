@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
@@ -16,6 +16,7 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   rejected: { label: 'Reddedildi', className: 'bg-gray-100 text-gray-600' },
   expired: { label: 'Süresi Dolmuş', className: 'bg-gray-100 text-gray-600' },
   accepted: { label: 'Kabul Edildi', className: 'bg-green-100 text-green-800' },
+  upcoming: { label: 'Vadesi Gelmedi', className: 'bg-blue-50 text-blue-700 border border-blue-200' },
 };
 
 interface StatusBadgeProps {

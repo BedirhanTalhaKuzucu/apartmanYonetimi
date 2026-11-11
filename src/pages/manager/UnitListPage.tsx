@@ -66,16 +66,21 @@ export default function UnitListPage() {
       : 0;
 
   const filteredUnits = (units ?? []).filter((u: any) => {
+    const q = search.toLowerCase();
     const matchesSearch =
-      u.unit_number.toLowerCase().includes(search.toLowerCase()) ||
-      u.block?.toLowerCase().includes(search.toLowerCase()) ||
+      u.unit_number.toLowerCase().includes(q) ||
+      u.block?.toLowerCase().includes(q) ||
       (u.unit_residents &&
         u.unit_residents.some((r: any) =>
-          r.full_name?.toLowerCase().includes(search.toLowerCase())
+          r.full_name?.toLowerCase().includes(q) ||
+          r.profiles?.full_name?.toLowerCase().includes(q) ||
+          r.phone?.includes(q)
         )) ||
       (u.residents &&
         u.residents.some((r: any) =>
-          r.full_name?.toLowerCase().includes(search.toLowerCase())
+          r.full_name?.toLowerCase().includes(q) ||
+          r.profiles?.full_name?.toLowerCase().includes(q) ||
+          r.phone?.includes(q)
         ));
 
     if (!matchesSearch) return false;
@@ -311,6 +316,7 @@ export default function UnitListPage() {
 
             return (
               <Card
+                as="div"
                 key={unit.id}
                 className={cn(
                   'p-3.5 sm:p-4 cursor-pointer transition-all active:bg-gray-50 bg-white rounded-xl shadow-xs border',
@@ -354,17 +360,19 @@ export default function UnitListPage() {
 
                       {residents.length > 0 ? (
                         <div className="mt-1 space-y-0.5">
-                          {residents.slice(0, 2).map((r: any) => (
-                            <div key={r.id || r.full_name} className="flex items-center gap-1.5 text-xs text-gray-600 truncate">
-                              <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                              <span className="font-medium text-gray-800 truncate">{r.full_name}</span>
-                              {r.phone && (
-                                <span className="text-gray-400 text-[11px] font-mono ml-1 shrink-0">
-                                  · {formatPhone(r.phone)}
-                                </span>
-                              )}
-                            </div>
-                          ))}
+                          {residents.slice(0, 2).map((r: any) => {
+                            const resName = r.full_name?.trim() || r.profiles?.full_name?.trim();
+                            const resPhone = r.phone?.trim() || r.profiles?.phone?.trim();
+                            // İsmi varsa sadece ismi gözüksün, isim yoksa telefon numarası fallback olsun
+                            const displayName = resName || (resPhone ? formatPhone(resPhone) : 'Sakin');
+
+                            return (
+                              <div key={r.id || displayName} className="flex items-center gap-1.5 text-xs text-gray-600 truncate">
+                                <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                <span className="font-medium text-gray-800 truncate">{displayName}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : (
                         <p className="text-xs text-gray-400 mt-0.5">Sakin kaydı yok</p>

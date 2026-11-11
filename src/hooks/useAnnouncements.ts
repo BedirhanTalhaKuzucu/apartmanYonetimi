@@ -1,4 +1,4 @@
-﻿import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import type { Announcement } from '@/types';
@@ -49,7 +49,7 @@ export function useCreateAnnouncement() {
       apartment_id: string;
       title: string;
       content: string;
-      attachment_url?: string;
+      attachment_url?: string | null;
       is_pinned?: boolean;
     }) => {
       const { data, error } = await supabase
@@ -83,7 +83,7 @@ export function useUpdateAnnouncement() {
       id: string;
       title?: string;
       content?: string;
-      attachment_url?: string;
+      attachment_url?: string | null;
       is_pinned?: boolean;
       is_published?: boolean;
     }) => {
@@ -142,7 +142,8 @@ export function useSendAnnouncementNotification() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (announcementId: string) => {
+    mutationFn: async (input: string | { announcement_id: string; apartment_id?: string }) => {
+      const announcementId = typeof input === 'string' ? input : input.announcement_id;
       // In production, this would call a Supabase Edge Function to send push notifications
       // For now, this creates in-app notifications for all residents
       const { data: announcement } = await supabase

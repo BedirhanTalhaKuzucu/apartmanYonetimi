@@ -132,6 +132,7 @@ export interface Payment {
   payment_date: string;
   description: string | null;
   receipt_no: string | null;
+  receipt_url?: string | null;
   status: 'active' | 'cancelled';
   cancellation_reason: string | null;
   cancelled_at: string | null;
@@ -167,6 +168,7 @@ export interface Income {
   description: string;
   income_date: string;
   category: string;
+  attachment_url?: string | null;
   recorded_by: string;
   status: 'active' | 'cancelled';
   created_at: string;

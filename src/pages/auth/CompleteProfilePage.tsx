@@ -1,7 +1,8 @@
-﻿import { useState, FormEvent } from 'react';
+import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Building2, Phone, User } from 'lucide-react';
+import { PhoneInput } from '@/components/ui/PhoneInput';
 import toast from 'react-hot-toast';
 
 /**
@@ -103,27 +104,14 @@ export default function CompleteProfilePage() {
 
           {/* Phone */}
           <div>
-            <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-              Telefon Numarası <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Phone className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                id="phone"
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="05XX XXX XX XX"
-                className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl text-base focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
-                autoComplete="tel"
-                required
-              />
-            </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Yöneticinizin sizinle WhatsApp üzerinden iletişim kurabilmesi için gereklidir
-            </p>
+            <PhoneInput
+              id="phone"
+              label="Telefon Numarası"
+              required
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              helper="Yöneticinizin sizinle WhatsApp üzerinden iletişim kurabilmesi için gereklidir"
+            />
           </div>
 
           <button

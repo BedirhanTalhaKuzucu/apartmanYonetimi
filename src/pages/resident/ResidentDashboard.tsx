@@ -57,6 +57,19 @@ export default function ResidentDashboard() {
         <p className="text-sm text-gray-500 mt-0.5">{currentApartment?.name}</p>
       </div>
 
+      {/* Aktif daire yoksa bilgilendirme kutusu */}
+      {unitIds.length === 0 && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-amber-900 shadow-2xs">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-xs sm:text-sm">
+            <p className="font-bold">Kayıtlı Aktif Daire Bulunamadı</p>
+            <p className="mt-0.5 text-amber-800">
+              Bu apartmanda şu an adınıza tanımlı aktif bir daire bulunmuyor. Daireniz yöneticiniz tarafından silinmiş veya kaydınız sonlandırılmış olabilir. Lütfen apartman yöneticiniz ile iletişime geçiniz.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Debt Summary Card */}
       <div
         className={cn(
