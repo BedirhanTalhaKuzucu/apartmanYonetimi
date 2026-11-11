@@ -502,11 +502,11 @@ function PasswordChangeModal({ onClose }: { onClose: () => void }) {
           required
         />
 
-        <div className="flex gap-3">
-          <Button type="button" variant="outline" onClick={onClose} fullWidth>
+        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 [&>*]:w-full sm:[&>*]:w-auto">
+          <Button type="button" variant="outline" onClick={onClose}>
             İptal
           </Button>
-          <Button type="submit" loading={loading} fullWidth>
+          <Button type="submit" loading={loading}>
             Güncelle
           </Button>
         </div>

@@ -92,14 +92,18 @@ export function useCreateIncome() {
 
       if (error) throw error;
 
-      await supabase.from('audit_log').insert({
-        apartment_id: input.apartment_id,
-        user_id: user!.id,
-        action: 'income_created',
-        entity_type: 'income',
-        entity_id: data.id,
-        details: { amount: input.amount, category: input.category },
-      });
+      try {
+        await supabase.from('audit_log').insert({
+          apartment_id: input.apartment_id,
+          user_id: user!.id,
+          action: 'income_created',
+          entity_type: 'income',
+          entity_id: data.id,
+          details: { amount: input.amount, category: input.category },
+        });
+      } catch {
+        // Audit log insert is optional / secured by RLS
+      }
 
       return data as Income;
     },
@@ -139,24 +143,70 @@ export function useCreateExpense() {
 
       if (error) throw error;
 
-      await supabase.from('audit_log').insert({
-        apartment_id: input.apartment_id,
-        user_id: user!.id,
-        action: 'expense_created',
-        entity_type: 'expense',
-        entity_id: data.id,
-        details: { amount: input.amount, category: input.category },
-      });
+      try {
+        await supabase.from('audit_log').insert({
+          apartment_id: input.apartment_id,
+          user_id: user!.id,
+          action: 'expense_created',
+          entity_type: 'expense',
+          entity_id: data.id,
+          details: { amount: input.amount, category: input.category },
+        });
+      } catch {
+        // Audit log insert is optional / secured by RLS
+      }
 
       return data as Expense;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['expenses', data.apartment_id] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       toast.success('Gider kaydedildi.');
     },
     onError: (error: Error) => {
       toast.error(`Gider kaydedilemedi: ${error.message}`);
+    },
+  });
+}
+
+export function useCreateBatchExpenses() {
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+
+  return useMutation({
+    mutationFn: async (inputs: {
+      apartment_id: string;
+      amount: number;
+      expense_date: string;
+      category: string;
+      description?: string;
+    }[]) => {
+      if (!inputs.length) return [];
+      const payload = inputs.map((input) => ({
+        ...input,
+        recorded_by: user!.id,
+        status: 'active' as const,
+      }));
+
+      const { data, error } = await supabase
+        .from('expenses')
+        .insert(payload)
+        .select();
+
+      if (error) throw error;
+      return data as Expense[];
+    },
+    onSuccess: (data) => {
+      if (data.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ['expenses', data[0].apartment_id] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      toast.success(`${data.length} adet gider kaydı oluşturuldu.`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Giderler kaydedilemedi: ${error.message}`);
     },
   });
 }
@@ -176,14 +226,18 @@ export function useCancelIncome() {
 
       if (error) throw error;
 
-      await supabase.from('audit_log').insert({
-        apartment_id: data.apartment_id,
-        user_id: user!.id,
-        action: 'income_cancelled',
-        entity_type: 'income',
-        entity_id: id,
-        details: { amount: data.amount },
-      });
+      try {
+        await supabase.from('audit_log').insert({
+          apartment_id: data.apartment_id,
+          user_id: user!.id,
+          action: 'income_cancelled',
+          entity_type: 'income',
+          entity_id: id,
+          details: { amount: data.amount },
+        });
+      } catch {
+        // Audit log insert is optional
+      }
 
       return data;
     },
@@ -213,14 +267,18 @@ export function useCancelExpense() {
 
       if (error) throw error;
 
-      await supabase.from('audit_log').insert({
-        apartment_id: data.apartment_id,
-        user_id: user!.id,
-        action: 'expense_cancelled',
-        entity_type: 'expense',
-        entity_id: id,
-        details: { amount: data.amount },
-      });
+      try {
+        await supabase.from('audit_log').insert({
+          apartment_id: data.apartment_id,
+          user_id: user!.id,
+          action: 'expense_cancelled',
+          entity_type: 'expense',
+          entity_id: id,
+          details: { amount: data.amount },
+        });
+      } catch {
+        // Audit log insert is optional
+      }
 
       return data;
     },
@@ -243,6 +301,11 @@ export interface FinancialSummary {
   net: number;
   initialBalance: number;
   currentBalance: number;
+  categoryBreakdown: Record<string, number>;
+  accrualTotal: number;
+  accrualPaid: number;
+  accrualRemaining: number;
+  collectionRate: number;
 }
 
 export function useFinancialSummary(apartmentId: string | undefined, period?: { startDate?: string; endDate?: string }) {
@@ -295,7 +358,7 @@ export function useFinancialSummary(apartmentId: string | undefined, period?: { 
       // Expenses
       let expenseQuery = supabase
         .from('expenses')
-        .select('amount')
+        .select('amount, category')
         .eq('apartment_id', apartmentId!)
         .eq('status', 'active');
 
@@ -304,13 +367,51 @@ export function useFinancialSummary(apartmentId: string | undefined, period?: { 
 
       const { data: expenses } = await expenseQuery;
 
-      const totalExpenses = (expenses ?? []).reduce(
-        (sum, e) => sum + Math.round(Number(e.amount) * 100),
-        0
-      ) / 100;
+      const categoryBreakdown: Record<string, number> = {};
+      const totalExpenses = (expenses ?? []).reduce((sum, e) => {
+        const amt = Math.round(Number(e.amount) * 100) / 100;
+        const cat = e.category || 'Diğer';
+        categoryBreakdown[cat] = Math.round(((categoryBreakdown[cat] || 0) + amt) * 100) / 100;
+        return sum + Math.round(amt * 100);
+      }, 0) / 100;
 
       const totalIncome = Math.round((totalPaymentIncome + totalOtherIncome) * 100) / 100;
       const net = Math.round((totalIncome - totalExpenses) * 100) / 100;
+
+      // Dues accrual stats
+      let duesQuery = supabase
+        .from('dues')
+        .select('amount, status, payments(amount, status)')
+        .eq('apartment_id', apartmentId!);
+
+      if (period?.startDate && period?.endDate) {
+        const startPeriod = period.startDate.substring(0, 7);
+        const endPeriod = period.endDate.substring(0, 7);
+        if (startPeriod === endPeriod) {
+          duesQuery = duesQuery.eq('period', startPeriod);
+        } else {
+          duesQuery = duesQuery.gte('period', startPeriod).lte('period', endPeriod);
+        }
+      }
+
+      const { data: duesData } = await duesQuery;
+
+      let accrualTotal = 0;
+      let accrualPaid = 0;
+
+      (duesData ?? []).forEach((d: any) => {
+        const amt = Number(d.amount) || 0;
+        accrualTotal += amt;
+        const paid = (d.payments ?? [])
+          .filter((p: any) => p.status === 'active')
+          .reduce((s: number, p: any) => s + Number(p.amount), 0);
+        accrualPaid += Math.min(amt, paid);
+      });
+
+      accrualTotal = Math.round(accrualTotal * 100) / 100;
+      accrualPaid = Math.round(accrualPaid * 100) / 100;
+      const accrualRemaining = Math.max(0, Math.round((accrualTotal - accrualPaid) * 100) / 100);
+      const collectionRate = accrualTotal > 0 ? Math.round((accrualPaid / accrualTotal) * 100) : 0;
 
       // Current balance: if period is filtered, show period net.
       // If no filter, show initial + all-time net
@@ -358,6 +459,11 @@ export function useFinancialSummary(apartmentId: string | undefined, period?: { 
         net,
         initialBalance,
         currentBalance,
+        categoryBreakdown,
+        accrualTotal,
+        accrualPaid,
+        accrualRemaining,
+        collectionRate,
       };
     },
     enabled: !!apartmentId,

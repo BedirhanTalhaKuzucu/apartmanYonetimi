@@ -19,7 +19,7 @@ import BankInfoCard from '@/components/shared/BankInfoCard';
 import StatusBadge from '@/components/shared/StatusBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrency, formatDate, formatPeriod, isOverdue } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { cn, isDueEligibleForUnitDebts } from '@/lib/utils';
 import { useResidentUnitIds } from '@/hooks/useResidentContext';
 
 export default function ResidentDashboard() {
@@ -31,7 +31,7 @@ export default function ResidentDashboard() {
   const { data: announcements } = useAnnouncements(currentApartment?.id);
   const { data: requests } = useMyRequests(user?.id);
 
-  const unpaidDues = (dues || []).filter((d: any) => d.status !== 'paid');
+  const unpaidDues = (dues || []).filter((d: any) => d.status !== 'paid' && isDueEligibleForUnitDebts(d));
   const totalOutstanding = unpaidDues.reduce(
     (sum: number, d: any) => sum + (Number(d.amount) - Number(d.paid_amount || 0)),
     0

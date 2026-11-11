@@ -1,10 +1,30 @@
 import type { DueStatus } from '@/types';
 
+const TEXT_COLORS = ['text-red-', 'text-blue-', 'text-green-', 'text-yellow-', 'text-gray-', 'text-amber-', 'text-primary-', 'text-orange-'];
+
 /**
- * Tailwind sınıflarını birleştirir. Falsy değerleri atlar.
+ * Tailwind sınıflarını birleştirir. Falsy değerleri atlar ve çakışan renk sınıflarını ayıklar.
  */
 export function cn(...classes: (string | false | null | undefined)[]): string {
-  return classes.filter(Boolean).join(' ');
+  const list = classes
+    .filter(Boolean)
+    .flatMap((c) => (c as string).trim().split(/\s+/))
+    .filter(Boolean);
+  const result: string[] = [];
+
+  for (let i = 0; i < list.length; i++) {
+    const cls = list[i];
+    const isColor = TEXT_COLORS.some((prefix) => cls.startsWith(prefix));
+    if (isColor) {
+      const hasLaterColor = list
+        .slice(i + 1)
+        .some((later) => TEXT_COLORS.some((prefix) => later.startsWith(prefix)));
+      if (hasLaterColor) continue;
+    }
+    result.push(cls);
+  }
+
+  return result.join(' ');
 }
 
 /**
@@ -22,8 +42,8 @@ export function generateToken(length = 48): string {
  * @param message Önceden hazırlanmış mesaj metni
  */
 export function buildWhatsAppUrl(phone: string, message: string): string {
-  // wa.me numarayı + olmadan bekler
-  const cleanPhone = phone.replace(/\+/g, '');
+  // wa.me numarayı sadece rakamlardan oluşacak şekilde bekler
+  const cleanPhone = phone.replace(/\D/g, '');
   const encoded = encodeURIComponent(message);
   return `https://wa.me/${cleanPhone}?text=${encoded}`;
 }
@@ -121,3 +141,66 @@ export function currentPeriod(): string {
 export function generateIdempotencyKey(): string {
   return `${Date.now()}-${generateToken(8)}`;
 }
+
+/**
+ * İki dönem ("YYYY-MM") arasındaki tüm dönemleri sıralı dizi olarak döner.
+ */
+export function getPeriodsBetween(startPeriod: string, endPeriod: string): string[] {
+  const [startYear, startMonth] = startPeriod.split('-').map(Number);
+  const [endYear, endMonth] = endPeriod.split('-').map(Number);
+  if (isNaN(startYear) || isNaN(startMonth) || isNaN(endYear) || isNaN(endMonth)) {
+    return [startPeriod];
+  }
+  const periods: string[] = [];
+  let y = startYear;
+  let m = startMonth;
+  while (y < endYear || (y === endYear && m <= endMonth)) {
+    periods.push(`${y}-${String(m).padStart(2, '0')}`);
+    m++;
+    if (m > 12) {
+      m = 1;
+      y++;
+    }
+  }
+  return periods.length > 0 ? periods : [startPeriod];
+}
+
+/**
+ * Bir daireye ait borçların görüntülenmesinde gösterilecek geçerli borçları belirler.
+ * Gelecek dönemlere ait (henüz vadesi / ayı gelmemiş) tekrarlayan aidatları gizler.
+ * Gösterilenler:
+ * - O ayın aidatı (period === currentPeriod)
+ * - Ödeme süresi / vadesi geçmiş olan aidatlar (period < currentPeriod veya due_date <= today)
+ * - Diğer gider kalemlerinden payına düşen borçlar (due_type === 'one_time')
+ */
+export function isDueEligibleForUnitDebts(due: {
+  period?: string | null;
+  due_date?: string | null;
+  due_type?: string | null;
+  status?: string | null;
+}): boolean {
+  // Gider payları ve tek seferlik ek borçlar her zaman borç listesinde yer alır
+  if (due.due_type === 'one_time') {
+    return true;
+  }
+
+  const curPeriod = currentPeriod();
+  const today = todayISO();
+
+  if (due.period) {
+    // Bu ayın aidatı veya geçmiş dönemlerin aidatları gösterilsin
+    if (due.period <= curPeriod) {
+      return true;
+    }
+    // Gelecek ayların aidatı (period > curPeriod) gizlensin
+    return false;
+  }
+
+  // Periyot belirtilmemişse son ödeme tarihine göre kontrol et
+  if (due.due_date) {
+    return due.due_date <= today;
+  }
+
+  return true;
+}
+

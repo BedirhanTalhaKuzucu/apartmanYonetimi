@@ -11,6 +11,7 @@ import Select from '@/components/ui/Select';
 import FileUpload from '@/components/shared/FileUpload';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrency, formatPeriod } from '@/lib/format';
+import { isDueEligibleForUnitDebts } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 export default function PaymentNotificationForm() {
@@ -31,7 +32,7 @@ export default function PaymentNotificationForm() {
   const [receiptUrl, setReceiptUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const unpaidDues = (dues || []).filter((d: any) => d.status !== 'paid');
+  const unpaidDues = (dues || []).filter((d: any) => d.status !== 'paid' && isDueEligibleForUnitDebts(d));
 
   // Auto-fill amount when due is selected
   useEffect(() => {

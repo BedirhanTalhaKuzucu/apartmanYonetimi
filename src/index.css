@@ -3,6 +3,13 @@
 @tailwind utilities;
 
 @layer base {
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100%;
+    width: 100%;
+  }
+
   html {
     -webkit-tap-highlight-color: transparent;
     scroll-behavior: smooth;
@@ -49,7 +56,7 @@
   }
 
   .input-base {
-    @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5
+    @apply w-full min-w-0 max-w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5
            text-base placeholder-gray-400 transition-colors duration-150
            focus:border-primary-500 focus:outline-none focus:ring-1
            focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed;
@@ -84,6 +91,17 @@
            flex items-center justify-around px-1 pb-[env(safe-area-inset-bottom)]
            md:hidden;
     height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Mobil görünümde klavye açıldığında (input odaklandığında) alt menünün klavye üstüne taşınmasını engelle */
+  body:has(
+    input:not([type='checkbox']):not([type='radio']):not([type='button']):not([type='submit']):not([type='file']):not([type='range']):not([type='color']):focus,
+    textarea:focus,
+    select:focus,
+    [contenteditable='true']:focus
+  ) .bottom-nav,
+  body.keyboard-open .bottom-nav {
+    display: none !important;
   }
 
   .bottom-nav-item {

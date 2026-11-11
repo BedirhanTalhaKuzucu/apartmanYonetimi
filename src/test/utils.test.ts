@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import { formatCurrency, formatPeriod, isOverdue, formatShortDate } from '@/lib/format';
 import { cn, buildWhatsAppUrl, getInitials } from '@/lib/utils';
 

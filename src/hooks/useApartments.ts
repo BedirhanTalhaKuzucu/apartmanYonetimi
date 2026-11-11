@@ -52,6 +52,11 @@ export function useCreateApartment() {
       iban?: string;
       account_holder?: string;
       initial_balance?: number;
+      default_monthly_due?: number;
+      auto_generate_dues?: boolean;
+      due_day?: number;
+      due_due_day?: number;
+      dues_end_period?: string | null;
     }) => {
       // Create apartment
       const { data: apartment, error } = await supabase
@@ -105,6 +110,11 @@ export function useUpdateApartment() {
       iban?: string;
       account_holder?: string;
       initial_balance?: number;
+      default_monthly_due?: number;
+      auto_generate_dues?: boolean;
+      due_day?: number;
+      due_due_day?: number;
+      dues_end_period?: string | null;
     }) => {
       const { id, ...updates } = input;
       const { data, error } = await supabase

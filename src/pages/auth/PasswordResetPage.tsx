@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+﻿import { useState, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Building2, Mail, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { supabase } from '@/lib/supabase';

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Bell, BellOff, BellRing, AlertTriangle, Smartphone, Info } from 'lucide-react';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import Button from '@/components/ui/Button';

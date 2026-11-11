@@ -13,7 +13,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import EmptyState from '@/components/ui/EmptyState';
 import { formatCurrency, formatDate, formatPeriod, isOverdue } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { cn, isDueEligibleForUnitDebts } from '@/lib/utils';
 
 type FilterTab = 'all' | 'unpaid' | 'overdue' | 'paid';
 
@@ -44,6 +44,10 @@ export default function MyDuesPage() {
   const { data: dues, isLoading } = useMyDues(unitIds);
 
   const filteredDues = (dues || []).filter((due: any) => {
+    // Henüz vadesi/zamanı gelmemiş gelecek dönem aidatları gizlenir
+    if (due.status !== 'paid' && !isDueEligibleForUnitDebts(due)) {
+      return false;
+    }
     if (activeTab === 'all') return true;
     const status = getDueDisplayStatus(due);
     if (activeTab === 'unpaid') return status === 'unpaid' || status === 'partially_paid';
@@ -52,12 +56,12 @@ export default function MyDuesPage() {
     return true;
   });
 
-  // Summary
+  // Summary (yalnızca tahakkuk etmiş borçlar hesaplanır)
   const totalDebt = (dues || [])
-    .filter((d: any) => d.status !== 'paid')
+    .filter((d: any) => d.status !== 'paid' && isDueEligibleForUnitDebts(d))
     .reduce((s: number, d: any) => s + (Number(d.amount) - Number(d.paid_amount || 0)), 0);
   const overdueCount = (dues || []).filter(
-    (d: any) => d.status !== 'paid' && d.due_date && isOverdue(d.due_date)
+    (d: any) => d.status !== 'paid' && isDueEligibleForUnitDebts(d) && d.due_date && isOverdue(d.due_date)
   ).length;
   const paidTotal = (dues || [])
     .filter((d: any) => d.status === 'paid')
@@ -137,7 +141,14 @@ export default function MyDuesPage() {
               >
                 <div className="flex items-start justify-between mb-2">
                   <div>
-                    <p className="font-semibold text-gray-900">{formatPeriod(due.period)}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-gray-900">{formatPeriod(due.period)}</p>
+                      {due.due_type === 'one_time' && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                          Ortak Masraf Payı
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-500">{due.description}</p>
                   </div>
                   <StatusBadge status={status} />
@@ -245,7 +256,7 @@ function DueDetail({
           <div>
             <p className="text-xs text-gray-500">Tür</p>
             <p className="text-sm font-medium text-gray-900">
-              {due.due_type === 'monthly' ? 'Aylık Aidat' : 'Tek Seferlik'}
+              {due.due_type === 'monthly' ? 'Aylık Düzenli Aidat' : 'Ortak Gider / Masraf Payı'}
             </p>
           </div>
         </div>

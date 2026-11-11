@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+﻿import type { ReactNode } from 'react';
 import { InboxIcon } from 'lucide-react';
 
 interface EmptyStateProps {

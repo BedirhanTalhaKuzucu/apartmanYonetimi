@@ -17,7 +17,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, helper, className, id, ...props }, ref) => {
     const inputId = id || props.name || label;
     return (
-      <div className="w-full">
+      <div className="w-full min-w-0 max-w-full">
         {label && (
           <label
             htmlFor={inputId}
@@ -56,7 +56,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, error, helper, className, id, ...props }, ref) => {
     const inputId = id || props.name || label;
     return (
-      <div className="w-full">
+      <div className="w-full min-w-0 max-w-full">
         {label && (
           <label
             htmlFor={inputId}

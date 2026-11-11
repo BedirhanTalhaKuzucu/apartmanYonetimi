@@ -51,7 +51,7 @@ export default function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       {/* Overlay */}
       <div
         className="fixed inset-0 bg-black/40 animate-fade-in"
@@ -65,18 +65,18 @@ export default function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          'relative z-10 w-full bg-white shadow-xl animate-slide-up',
-          'sm:rounded-xl rounded-t-xl max-h-[90vh] flex flex-col',
+          'relative z-10 w-full min-w-0 max-w-full bg-white shadow-xl animate-slide-up',
+          'sm:rounded-xl rounded-t-xl max-h-[90vh] flex flex-col overflow-hidden',
           sizeClasses[size]
         )}
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 border-b border-gray-100 shrink-0">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900 truncate pr-2">{title}</h2>
             <button
               onClick={onClose}
-              className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 shrink-0"
               aria-label="Kapat"
             >
               <X className="h-5 w-5" />
@@ -85,11 +85,11 @@ export default function Modal({
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-5 py-3.5 sm:py-4 min-w-0">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-100">
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3 px-4 sm:px-5 py-3 sm:py-4 border-t border-gray-100 shrink-0 [&>*]:w-full sm:[&>*]:w-auto">
             {footer}
           </div>
         )}

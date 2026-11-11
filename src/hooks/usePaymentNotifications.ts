@@ -1,4 +1,4 @@
-// Re-export payment notification hooks for backward compatibility
+﻿// Re-export payment notification hooks for backward compatibility
 export {
   usePaymentNotifications,
   useApprovePaymentNotification as useApproveNotification,

@@ -114,7 +114,7 @@ export default function ApartmentListPage() {
             placeholder="İsteğe bağlı açıklama"
             type="textarea"
           />
-          <div className="flex gap-2 justify-end pt-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 [&>*]:w-full sm:[&>*]:w-auto">
             <Button variant="outline" onClick={() => setShowCreate(false)}>İptal</Button>
             <Button onClick={handleCreate} loading={createApartment.isPending}>Oluştur</Button>
           </div>

@@ -13,7 +13,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, error, helper, options, placeholder, className, id, children, ...props }, ref) => {
     const selectId = id || props.name || label;
     return (
-      <div className="w-full">
+      <div className="w-full min-w-0 max-w-full">
         {label && (
           <label
             htmlFor={selectId}

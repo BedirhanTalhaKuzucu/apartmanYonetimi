@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { FileText, Download, Share2 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -21,6 +22,7 @@ const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth();
 
 export default function DocumentsPage() {
+  const [searchParams] = useSearchParams();
   const { currentApartment } = useAuthStore();
   const { data: payments } = usePayments(currentApartment?.id);
   const { data: units } = useUnits(currentApartment?.id);
@@ -34,6 +36,20 @@ export default function DocumentsPage() {
   const [reportYear, setReportYear] = useState(currentYear);
   const [announcementId, setAnnouncementId] = useState('');
   const [generating, setGenerating] = useState('');
+
+  useEffect(() => {
+    const type = searchParams.get('type');
+    if (type) {
+      const el = document.getElementById(`doc-card-${type}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-primary-500', 'shadow-md');
+        setTimeout(() => {
+          el.classList.remove('ring-2', 'ring-primary-500', 'shadow-md');
+        }, 3000);
+      }
+    }
+  }, [searchParams]);
 
   const activePayments = payments?.filter((p: any) => p.status === 'active') ?? [];
 
@@ -139,7 +155,7 @@ export default function DocumentsPage() {
       <h1 className="text-xl font-bold">Belgeler</h1>
 
       {/* Payment Receipt */}
-      <Card className="p-4 space-y-3">
+      <Card id="doc-card-receipt" className="p-4 space-y-3 transition-all duration-300">
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary-600" />
           <h2 className="font-semibold">Ödeme Makbuzu</h2>
@@ -167,7 +183,7 @@ export default function DocumentsPage() {
       </Card>
 
       {/* Unit Statement */}
-      <Card className="p-4 space-y-3">
+      <Card id="doc-card-statement" className="p-4 space-y-3 transition-all duration-300">
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-green-600" />
           <h2 className="font-semibold">Daire Hesap Dökümü</h2>
@@ -209,7 +225,7 @@ export default function DocumentsPage() {
       </Card>
 
       {/* Income/Expense Report */}
-      <Card className="p-4 space-y-3">
+      <Card id="doc-card-report" className="p-4 space-y-3 transition-all duration-300">
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-orange-600" />
           <h2 className="font-semibold">Gelir-Gider Raporu</h2>
@@ -237,7 +253,7 @@ export default function DocumentsPage() {
       </Card>
 
       {/* Announcement PDF */}
-      <Card className="p-4 space-y-3">
+      <Card id="doc-card-announcement" className="p-4 space-y-3 transition-all duration-300">
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-purple-600" />
           <h2 className="font-semibold">Duyuru PDF</h2>

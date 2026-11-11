@@ -138,7 +138,35 @@ export default function App() {
   // Sayfa değiştiğinde üste kaydır
   useEffect(() => {
     window.scrollTo(0, 0);
+    document.body.classList.remove('keyboard-open');
   }, [location.pathname]);
+
+  // Mobil görünümde sanal klavye açıldığında/kapandığında bottom-nav durumunu yönet
+  useEffect(() => {
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        target.matches?.(
+          'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="file"]):not([type="range"]):not([type="color"]), textarea, select, [contenteditable="true"]'
+        )
+      ) {
+        document.body.classList.add('keyboard-open');
+      }
+    };
+
+    const handleFocusOut = () => {
+      document.body.classList.remove('keyboard-open');
+    };
+
+    window.addEventListener('focusin', handleFocusIn);
+    window.addEventListener('focusout', handleFocusOut);
+
+    return () => {
+      window.removeEventListener('focusin', handleFocusIn);
+      window.removeEventListener('focusout', handleFocusOut);
+    };
+  }, []);
 
   return (
     <Suspense fallback={<LoadingSpinner />}>

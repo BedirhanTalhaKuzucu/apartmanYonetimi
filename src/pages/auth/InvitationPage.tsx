@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from 'react';
+﻿import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useInvitationByToken, useAcceptInvitation } from '@/hooks/useInvitations';
 import { useAuth } from '@/hooks/useAuth';

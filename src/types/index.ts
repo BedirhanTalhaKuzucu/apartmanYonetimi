@@ -46,6 +46,12 @@ export interface Apartment {
   iban: string | null;
   account_holder: string | null;
   initial_balance: number;
+  default_monthly_due?: number;
+  auto_generate_dues?: boolean;
+  due_day?: number;
+  due_due_day?: number;
+  last_dues_generated_period?: string | null;
+  dues_end_period?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -106,6 +112,8 @@ export interface Due {
   period: string; // "YYYY-MM"
   description: string;
   amount: number;
+  paid_amount?: number;
+  remaining_amount?: number;
   due_date: string; // "YYYY-MM-DD"
   due_type: 'monthly' | 'one_time';
   status: DueStatus;

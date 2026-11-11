@@ -78,6 +78,64 @@ export function useCreateUnit() {
   });
 }
 
+export function useCreateBatchUnits() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      apartment_id: string;
+      start_number: number;
+      end_number: number;
+      block?: string | null;
+      monthly_due?: number | null;
+    }) => {
+      // Önce RPC dene
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('create_units_batch', {
+          p_apartment_id: input.apartment_id,
+          p_start_number: input.start_number,
+          p_end_number: input.end_number,
+          p_block: input.block || null,
+          p_monthly_due: input.monthly_due ?? null,
+        });
+
+        if (!rpcError && rpcData?.success) {
+          return rpcData;
+        }
+      } catch {
+        // RPC tanımlı değilse fallback'e geç
+      }
+
+      // İstemci taraflı toplu ekleme fallback'i
+      const rows = [];
+      for (let i = input.start_number; i <= input.end_number; i++) {
+        rows.push({
+          apartment_id: input.apartment_id,
+          unit_number: String(i),
+          block: input.block || null,
+          monthly_due: input.monthly_due ?? null,
+          is_active: true,
+        });
+      }
+
+      const { data, error } = await supabase
+        .from('units')
+        .insert(rows)
+        .select();
+
+      if (error) throw error;
+      return { success: true, created_count: data?.length ?? 0 };
+    },
+    onSuccess: (res, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['units', vars.apartment_id] });
+      toast.success(`${res.created_count ?? ''} daire başarıyla oluşturuldu.`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Toplu daire eklenemedi: ${error.message}`);
+    },
+  });
+}
+
 export function useUpdateUnit() {
   const queryClient = useQueryClient();
 

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { Save, UserPlus, Send, Link2, Phone, Copy, MessageCircle } from 'lucide-react';
+import { Save, UserPlus, Send, Link2, Phone, Copy, MessageCircle, CreditCard, Wallet } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -10,13 +10,13 @@ import { Select } from '@/components/ui/Select';
 import { Tabs } from '@/components/ui/Tabs';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatCurrency, formatDate, formatShortDate, formatPhone, formatPeriod } from '@/lib/format';
-import { buildWhatsAppUrl } from '@/lib/utils';
+import { formatCurrency, formatDate, formatShortDate, formatPhone, formatPeriod, isOverdue } from '@/lib/format';
+import { buildWhatsAppUrl, isDueEligibleForUnitDebts, generateIdempotencyKey } from '@/lib/utils';
 import { useUnitDetail, useUpdateUnit } from '@/hooks/useUnits';
 import { useUnitResidents, useAddResident } from '@/hooks/useResidents';
 import { useCreateInvitation } from '@/hooks/useInvitations';
 import { useUnitDues } from '@/hooks/useDues';
-import { useUnitPayments } from '@/hooks/usePayments';
+import { useUnitPayments, useCreatePayment } from '@/hooks/usePayments';
 import { useAuthStore } from '@/store/authStore';
 import toast from 'react-hot-toast';
 
@@ -30,11 +30,75 @@ export default function UnitDetailPage() {
   const createInvitation = useCreateInvitation();
   const { data: dues } = useUnitDues(id!);
   const { data: payments } = useUnitPayments(id!);
+  const createPayment = useCreatePayment();
+
+  // Borçlar sekmesinde: Yalnızca ödenmemiş/kısmi ve tahakkuk etmiş borçlar gösterilir.
+  // Ödenen borçlar artık bu sekmede yer almaz, "Ödemeler" sekmesinde listelenir.
+  const openEligibleDues = useMemo(() => {
+    return (dues ?? []).filter((d: any) => d.status !== 'paid' && isDueEligibleForUnitDebts(d));
+  }, [dues]);
+
+  const totalEligibleDebt = useMemo(() => {
+    return openEligibleDues.reduce((sum: number, d: any) => {
+      const remaining = d.remaining_amount ?? Math.max(0, Number(d.amount) - Number(d.paid_amount || 0));
+      return sum + remaining;
+    }, 0);
+  }, [openEligibleDues]);
+
+  const totalPaidAmount = useMemo(() => {
+    return (payments ?? [])
+      .filter((p: any) => p.status === 'active')
+      .reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+  }, [payments]);
 
   const [activeTab, setActiveTab] = useState('bilgi');
   const [showAddResident, setShowAddResident] = useState(false);
   const [showInviteLink, setShowInviteLink] = useState<string | null>(null);
   const [showDirectInvite, setShowDirectInvite] = useState(false);
+  const [quickPayDue, setQuickPayDue] = useState<any | null>(null);
+  const [quickPayForm, setQuickPayForm] = useState({
+    amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_method: 'bank_transfer',
+    description: '',
+  });
+
+  const handleOpenQuickPay = (due: any) => {
+    const paid = Number(due.paid_amount || 0);
+    const remaining = due.remaining_amount ?? Math.max(0, Number(due.amount) - paid);
+    setQuickPayDue(due);
+    setQuickPayForm({
+      amount: remaining > 0 ? remaining.toString() : due.amount.toString(),
+      payment_date: new Date().toISOString().split('T')[0],
+      payment_method: 'bank_transfer',
+      description: `Daire ${unit?.unit_number} - ${due.description || 'Aidat'} tahsilatı`,
+    });
+  };
+
+  const handleSaveQuickPay = async () => {
+    if (!quickPayDue || !unit) return;
+    const amt = parseFloat(quickPayForm.amount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error('Geçerli bir ödeme tutarı girin');
+      return;
+    }
+    try {
+      await createPayment.mutateAsync({
+        apartment_id: currentApartment!.id,
+        unit_id: unit.id,
+        due_id: quickPayDue.id,
+        amount: amt,
+        payment_date: quickPayForm.payment_date,
+        payment_method: quickPayForm.payment_method,
+        description: quickPayForm.description.trim() || undefined,
+        idempotency_key: generateIdempotencyKey(),
+      });
+      toast.success('Ödeme başarıyla kaydedildi');
+      setQuickPayDue(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Ödeme kaydedilemedi');
+    }
+  };
   const [inviteForm, setInviteForm] = useState({
     invited_name: '',
     invited_phone: '',
@@ -161,7 +225,7 @@ export default function UnitDetailPage() {
   const tabs = [
     { id: 'bilgi', label: 'Bilgi' },
     { id: 'sakinler', label: `Sakinler (${residents?.length ?? 0})` },
-    { id: 'borclar', label: `Borçlar (${dues?.length ?? 0})` },
+    { id: 'borclar', label: `Borçlar (${openEligibleDues.length})` },
     { id: 'odemeler', label: `Ödemeler (${payments?.length ?? 0})` },
   ];
 
@@ -280,70 +344,165 @@ export default function UnitDetailPage() {
         </div>
       )}
 
-      {/* Borçlar Tab */}
+      {/* Borçlar Tab (Yalnızca ödenmemiş/kısmi ödenmiş aktif borçlar listelenir) */}
       {activeTab === 'borclar' && (
-        <div className="space-y-2">
-          {dues && dues.length > 0 ? (
-            dues.map((due: any) => (
-              <Card key={due.id} className="p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{due.description}</p>
-                    <p className="text-xs text-gray-500">
-                      {due.period ? formatPeriod(due.period) : formatShortDate(due.due_date)}
-                    </p>
+        <div className="space-y-3">
+          {totalEligibleDebt > 0 && (
+            <div className="flex items-center justify-between p-3.5 bg-red-50/90 border border-red-200 rounded-xl">
+              <div>
+                <span className="font-bold text-red-950 block text-sm">Aktif Toplam Borç</span>
+                <span className="text-xs text-red-700">
+                  Bu ayın aidatı, gecikmiş borçlar ve gider payları
+                </span>
+              </div>
+              <span className="text-base sm:text-lg font-extrabold text-red-700">
+                {formatCurrency(totalEligibleDebt)}
+              </span>
+            </div>
+          )}
+
+          {openEligibleDues.length > 0 ? (
+            openEligibleDues.map((due: any) => {
+              const paid = Number(due.paid_amount || 0);
+              const remaining = due.remaining_amount ?? Math.max(0, Number(due.amount) - paid);
+              const isDueLate = due.due_date && isOverdue(due.due_date);
+
+              return (
+                <Card key={due.id} className="p-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-gray-900">{due.description}</p>
+                        <Badge
+                          variant={
+                            due.status === 'partially_paid'
+                              ? 'warning'
+                              : isDueLate
+                              ? 'danger'
+                              : 'neutral'
+                          }
+                        >
+                          {due.status === 'partially_paid'
+                            ? 'Kısmi'
+                            : isDueLate
+                            ? 'Gecikmiş'
+                            : 'Ödenmemiş'}
+                        </Badge>
+                        {due.due_type === 'monthly' ? (
+                          <span className="text-[10px] text-primary-700 bg-primary-50 px-1.5 py-0.5 rounded font-medium">
+                            {due.period ? formatPeriod(due.period) : 'Aylık Aidat'}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-medium">
+                            Gider Payı / Ek Borç
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Vade: {due.due_date ? formatShortDate(due.due_date) : '-'} · Tutar: {formatCurrency(due.amount)}
+                      </p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-gray-900">{formatCurrency(due.amount)}</p>
+                      {paid > 0 && remaining > 0 && (
+                        <p className="text-xs text-amber-600 font-medium">Kalan: {formatCurrency(remaining)}</p>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-1.5 h-7 text-xs px-2.5 text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 font-semibold"
+                        onClick={() => handleOpenQuickPay(due)}
+                      >
+                        <CreditCard className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                        Ödeme Kaydet
+                      </Button>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold">{formatCurrency(due.amount)}</p>
-                    {due.paid_amount > 0 && (
-                      <p className="text-xs text-green-600">Ödenen: {formatCurrency(due.paid_amount)}</p>
-                    )}
-                    <Badge
-                      variant={
-                        due.status === 'paid' ? 'success' :
-                        due.status === 'partially_paid' ? 'warning' :
-                        due.is_overdue ? 'danger' : 'neutral'
-                      }
-                    >
-                      {due.status === 'paid' ? 'Ödendi' :
-                       due.status === 'partially_paid' ? 'Kısmi' :
-                       due.is_overdue ? 'Gecikmiş' : 'Ödenmemiş'}
-                    </Badge>
-                  </div>
-                </div>
-              </Card>
-            ))
+                </Card>
+              );
+            })
           ) : (
-            <EmptyState title="Borç kaydı yok" description="Bu daireye ait borç bulunmuyor." />
+            <EmptyState
+              title="Aktif borç kaydı yok"
+              description="Bu daireye ait ödenmemiş herhangi bir borç bulunmuyor. Yapılan ödemeleri 'Ödemeler' sekmesinden görüntüleyebilirsiniz."
+            />
           )}
         </div>
       )}
 
-      {/* Ödemeler Tab */}
+      {/* Ödemeler Tab (Ödenmiş aidatlar ve yapılan tahsilatlar burada listelenir) */}
       {activeTab === 'odemeler' && (
-        <div className="space-y-2">
+        <div className="space-y-3">
+          {totalPaidAmount > 0 && (
+            <div className="flex items-center justify-between p-3.5 bg-emerald-50/90 border border-emerald-200 rounded-xl">
+              <div>
+                <span className="font-bold text-emerald-950 block text-sm">Toplam Yapılan Ödeme</span>
+                <span className="text-xs text-emerald-700">
+                  Bu daireye ait kaydedilmiş tüm onaylı tahsilatlar
+                </span>
+              </div>
+              <span className="text-base sm:text-lg font-extrabold text-emerald-700">
+                {formatCurrency(totalPaidAmount)}
+              </span>
+            </div>
+          )}
+
           {payments && payments.length > 0 ? (
-            payments.map((payment: any) => (
-              <Card key={payment.id} className="p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{formatCurrency(payment.amount)}</p>
-                    <p className="text-xs text-gray-500">{formatShortDate(payment.payment_date)}</p>
-                    {payment.description && <p className="text-xs text-gray-400">{payment.description}</p>}
+            payments.map((payment: any) => {
+              const dueInfo = payment.dues
+                ? `${payment.dues.description}${payment.dues.period ? ` (${formatPeriod(payment.dues.period)})` : ''}`
+                : null;
+
+              const methodLabel =
+                payment.payment_method === 'bank_transfer'
+                  ? 'Havale / EFT'
+                  : payment.payment_method === 'cash'
+                  ? 'Nakit'
+                  : 'Diğer';
+
+              return (
+                <Card key={payment.id} className="p-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-gray-900">
+                          {dueInfo || payment.description || 'Tahsilat / Ödeme'}
+                        </span>
+                        <Badge variant={payment.status === 'active' ? 'success' : 'danger'} className="text-[11px]">
+                          {payment.status === 'active' ? 'Ödendi' : 'İptal'}
+                        </Badge>
+                        <span className="text-[10px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded font-medium">
+                          {methodLabel}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 mt-1">
+                        <span>Tarih: {formatShortDate(payment.payment_date)}</span>
+                        {payment.receipt_no && (
+                          <span className="font-mono text-[11px] text-gray-400">#{payment.receipt_no}</span>
+                        )}
+                        {dueInfo && payment.description && payment.description !== dueInfo && (
+                          <span className="text-gray-400 italic">· {payment.description}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-sm sm:text-base font-extrabold text-emerald-700 block">
+                        + {formatCurrency(payment.amount)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <Badge variant={payment.status === 'active' ? 'success' : 'danger'}>
-                      {payment.status === 'active' ? 'Aktif' : 'İptal'}
-                    </Badge>
-                    {payment.receipt_no && (
-                      <p className="text-xs text-gray-400 mt-1">#{payment.receipt_no}</p>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))
+                </Card>
+              );
+            })
           ) : (
-            <EmptyState title="Ödeme kaydı yok" description="Bu daireye ait ödeme bulunmuyor." />
+            <EmptyState
+              icon={<Wallet className="w-10 h-10 text-gray-300" />}
+              title="Ödeme kaydı yok"
+              description="Bu daireye ait henüz kaydedilmiş bir ödeme bulunmuyor."
+            />
           )}
         </div>
       )}
@@ -372,7 +531,7 @@ export default function UnitDetailPage() {
               { value: 'owner', label: 'Ev Sahibi' },
             ]}
           />
-          <div className="flex gap-2 justify-end pt-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 [&>*]:w-full sm:[&>*]:w-auto">
             <Button variant="outline" onClick={() => setShowAddResident(false)}>İptal</Button>
             <Button onClick={handleAddResident} loading={addResident.isPending}>Ekle</Button>
           </div>
@@ -407,7 +566,7 @@ export default function UnitDetailPage() {
               { value: 'owner', label: 'Ev Sahibi' },
             ]}
           />
-          <div className="flex gap-2 justify-end pt-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 [&>*]:w-full sm:[&>*]:w-auto">
             <Button variant="outline" onClick={() => setShowDirectInvite(false)}>İptal</Button>
             <Button onClick={handleDirectInvite} loading={createInvitation.isPending}>
               <Send className="w-4 h-4 mr-1" /> Davet Oluştur
@@ -425,7 +584,7 @@ export default function UnitDetailPage() {
           <div className="bg-gray-50 p-3 rounded-lg break-all text-sm text-gray-700 font-mono">
             {showInviteLink}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 [&>*]:w-full sm:[&>*]:w-auto">
             <Button variant="outline" size="sm" onClick={copyInviteLink}>
               <Copy className="w-4 h-4 mr-1" /> Kopyala
             </Button>
@@ -434,6 +593,82 @@ export default function UnitDetailPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Hızlı Ödeme Kaydetme Modalı */}
+      <Modal
+        isOpen={!!quickPayDue}
+        onClose={() => setQuickPayDue(null)}
+        title={`Ödeme Kaydet - Daire ${unit.unit_number}`}
+      >
+        {quickPayDue && (
+          <div className="space-y-4">
+            <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-emerald-800 font-medium">Daire:</span>
+                <span className="font-bold text-emerald-950">
+                  {unit.block ? `${unit.block} Blok ` : ''}Daire {unit.unit_number}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-emerald-800 font-medium">Borç / Kalem:</span>
+                <span className="font-semibold text-emerald-950">{quickPayDue.description}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-emerald-800 font-medium">Toplam Tutar:</span>
+                <span className="font-bold text-emerald-950">{formatCurrency(quickPayDue.amount)}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Ödenen Tutar (₺) *"
+                type="number"
+                placeholder="0.00"
+                value={quickPayForm.amount}
+                onChange={(e) => setQuickPayForm({ ...quickPayForm, amount: e.target.value })}
+              />
+              <Input
+                label="Ödeme Tarihi *"
+                type="date"
+                value={quickPayForm.payment_date}
+                onChange={(e) => setQuickPayForm({ ...quickPayForm, payment_date: e.target.value })}
+              />
+            </div>
+
+            <Select
+              label="Ödeme Yöntemi *"
+              value={quickPayForm.payment_method}
+              onChange={(e) => setQuickPayForm({ ...quickPayForm, payment_method: e.target.value })}
+              options={[
+                { value: 'bank_transfer', label: 'Havale / EFT' },
+                { value: 'cash', label: 'Nakit' },
+                { value: 'other', label: 'Diğer' },
+              ]}
+            />
+
+            <Input
+              label="Açıklama (İsteğe bağlı)"
+              value={quickPayForm.description}
+              onChange={(e) => setQuickPayForm({ ...quickPayForm, description: e.target.value })}
+              placeholder="Dekont no, not vb."
+            />
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 border-t border-gray-100 [&>*]:w-full sm:[&>*]:w-auto">
+              <Button variant="outline" onClick={() => setQuickPayDue(null)}>
+                İptal
+              </Button>
+              <Button
+                onClick={handleSaveQuickPay}
+                loading={createPayment.isPending}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                <CreditCard className="w-4 h-4 mr-1.5" />
+                Ödemeyi Kaydet
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

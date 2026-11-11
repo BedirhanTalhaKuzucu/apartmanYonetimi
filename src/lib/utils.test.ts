@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { cn, generateToken, buildWhatsAppUrl, calculateDueStatus } from './utils';
+import {
+  cn,
+  generateToken,
+  buildWhatsAppUrl,
+  calculateDueStatus,
+  isDueEligibleForUnitDebts,
+  currentPeriod,
+} from './utils';
 
 describe('cn', () => {
   it('merges class names', () => {
@@ -65,5 +72,25 @@ describe('calculateDueStatus', () => {
   it('returns unpaid when nothing paid', () => {
     const status = calculateDueStatus(1000, 0, '2099-12-31');
     expect(status).toBe('unpaid');
+  });
+});
+
+describe('isDueEligibleForUnitDebts', () => {
+  it('always includes one_time expense shares', () => {
+    expect(isDueEligibleForUnitDebts({ due_type: 'one_time', period: '2099-01' })).toBe(true);
+    expect(isDueEligibleForUnitDebts({ due_type: 'one_time', period: null })).toBe(true);
+  });
+
+  it('includes current month dues', () => {
+    const cur = currentPeriod();
+    expect(isDueEligibleForUnitDebts({ due_type: 'monthly', period: cur })).toBe(true);
+  });
+
+  it('includes past months dues (overdue)', () => {
+    expect(isDueEligibleForUnitDebts({ due_type: 'monthly', period: '2020-01' })).toBe(true);
+  });
+
+  it('excludes future months dues (not yet accrued)', () => {
+    expect(isDueEligibleForUnitDebts({ due_type: 'monthly', period: '2099-12' })).toBe(false);
   });
 });

@@ -59,7 +59,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary-50 to-white flex flex-col items-center justify-center px-4">
+    <div className="min-h-[100dvh] bg-gradient-to-b from-primary-50 to-white flex flex-col items-center justify-start sm:justify-center px-4 pt-6 pb-32 sm:py-8 overflow-y-auto">
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -151,6 +151,7 @@ export default function LoginPage() {
                   <input
                     id="phone"
                     type="tel"
+                    inputMode="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="05XX XXX XX XX"

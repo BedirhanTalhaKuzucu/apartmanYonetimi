@@ -184,7 +184,7 @@ export default function AnnouncementsPage() {
             />
             Duyuruyu sabitle
           </label>
-          <div className="flex gap-2 justify-end pt-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 [&>*]:w-full sm:[&>*]:w-auto">
             <Button variant="outline" onClick={() => { setShowCreate(false); setEditing(null); }}>İptal</Button>
             <Button onClick={handleSave} loading={createAnnouncement.isPending || updateAnnouncement.isPending}>
               {editing ? 'Güncelle' : 'Yayınla'}

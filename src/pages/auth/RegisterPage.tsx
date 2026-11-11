@@ -11,9 +11,18 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+
+  const handleInputFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    const target = e.target;
+    // Mobil klavye açılırken inputun klavye arkasında kalmaması için görünür alana kaydır
+    setTimeout(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300);
+  };
 
   const passwordStrength = (): { label: string; color: string; width: string } => {
     if (password.length === 0) return { label: '', color: '', width: '0%' };
@@ -85,7 +94,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary-50 to-white flex flex-col items-center justify-center px-4 py-8">
+    <div className="min-h-[100dvh] bg-gradient-to-b from-primary-50 to-white flex flex-col items-center justify-start sm:justify-center px-4 pt-6 pb-44 sm:py-8 overflow-y-auto">
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-6">
@@ -138,6 +147,7 @@ export default function RegisterPage() {
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
+                onFocus={handleInputFocus}
                 placeholder="Adınız Soyadınız"
                 className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl text-base focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
                 autoComplete="name"
@@ -158,8 +168,10 @@ export default function RegisterPage() {
               <input
                 id="phone"
                 type="tel"
+                inputMode="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                onFocus={handleInputFocus}
                 placeholder="05XX XXX XX XX"
                 className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl text-base focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
                 autoComplete="tel"
@@ -181,8 +193,10 @@ export default function RegisterPage() {
               <input
                 id="email"
                 type="email"
+                inputMode="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onFocus={handleInputFocus}
                 placeholder="ornek@email.com"
                 className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl text-base focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
                 autoComplete="email"
@@ -206,6 +220,7 @@ export default function RegisterPage() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onFocus={handleInputFocus}
                 placeholder="En az 8 karakter"
                 className="block w-full pl-10 pr-12 py-3 border border-gray-200 rounded-xl text-base focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
                 autoComplete="new-password"
@@ -249,14 +264,27 @@ export default function RegisterPage() {
               </div>
               <input
                 id="passwordConfirm"
-                type={showPassword ? 'text' : 'password'}
+                type={showConfirmPassword ? 'text' : 'password'}
                 value={passwordConfirm}
                 onChange={(e) => setPasswordConfirm(e.target.value)}
+                onFocus={handleInputFocus}
                 placeholder="Şifrenizi tekrar girin"
-                className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl text-base focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
+                className="block w-full pl-10 pr-12 py-3 border border-gray-200 rounded-xl text-base focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
                 autoComplete="new-password"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                tabIndex={-1}
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-5 w-5 text-gray-400" />
+                ) : (
+                  <Eye className="h-5 w-5 text-gray-400" />
+                )}
+              </button>
             </div>
             {passwordConfirm && password !== passwordConfirm && (
               <p className="text-xs text-red-500 mt-1">Şifreler eşleşmiyor</p>

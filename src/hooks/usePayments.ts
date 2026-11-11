@@ -4,7 +4,10 @@ import { useAuthStore } from '@/store/authStore';
 import type { Payment, PaymentNotification } from '@/types';
 import toast from 'react-hot-toast';
 
-export function usePayments(apartmentId: string | undefined, filters?: { unitId?: string; status?: string }) {
+export function usePayments(
+  apartmentId: string | undefined,
+  filters?: { unitId?: string; status?: string; startDate?: string; endDate?: string }
+) {
   return useQuery({
     queryKey: ['payments', apartmentId, filters],
     queryFn: async () => {
@@ -20,10 +23,19 @@ export function usePayments(apartmentId: string | undefined, filters?: { unitId?
       if (filters?.status) {
         query = query.eq('status', filters.status);
       }
+      if (filters?.startDate) {
+        query = query.gte('payment_date', filters.startDate);
+      }
+      if (filters?.endDate) {
+        query = query.lte('payment_date', filters.endDate);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as (Payment & { units: { unit_number: string; block: string | null }; dues: { period: string; description: string } | null })[];
+      return data as (Payment & {
+        units: { unit_number: string; block: string | null };
+        dues: { period: string; description: string } | null;
+      })[];
     },
     enabled: !!apartmentId,
   });
@@ -181,7 +193,10 @@ export function useCreatePayment() {
       queryClient.invalidateQueries({ queryKey: ['dues'] });
       queryClient.invalidateQueries({ queryKey: ['overdue-dues'] });
       queryClient.invalidateQueries({ queryKey: ['unit-payments', data.unit_id] });
+      queryClient.invalidateQueries({ queryKey: ['unit-dues', data.unit_id] });
+      queryClient.invalidateQueries({ queryKey: ['unit-dues'] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['incomes'] });
       if (data.due_id) {
         queryClient.invalidateQueries({ queryKey: ['due', data.due_id] });
       }
@@ -251,7 +266,10 @@ export function useCancelPayment() {
       queryClient.invalidateQueries({ queryKey: ['dues'] });
       queryClient.invalidateQueries({ queryKey: ['overdue-dues'] });
       queryClient.invalidateQueries({ queryKey: ['unit-payments', data.unit_id] });
+      queryClient.invalidateQueries({ queryKey: ['unit-dues', data.unit_id] });
+      queryClient.invalidateQueries({ queryKey: ['unit-dues'] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['incomes'] });
       toast.success('Ödeme iptal edildi.');
     },
     onError: (error: Error) => {

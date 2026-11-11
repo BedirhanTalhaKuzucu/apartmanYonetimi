@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+﻿import { useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { parsePhoneToE164 } from '@/lib/format';

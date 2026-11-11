@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CreditCard, Plus, XCircle, CheckCircle, Eye, ImageIcon, Ban } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
@@ -11,6 +11,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency, formatShortDate, formatPeriod } from '@/lib/format';
+import { isDueEligibleForUnitDebts } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { usePayments, useCreatePayment, useCancelPayment } from '@/hooks/usePayments';
 import { usePaymentNotifications, useApproveNotification, useRejectNotification } from '@/hooks/usePaymentNotifications';
@@ -19,7 +20,7 @@ import { useUnitDues } from '@/hooks/useDues';
 import toast from 'react-hot-toast';
 
 export default function PaymentsPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentApartment } = useAuthStore();
   const { data: payments, isLoading } = usePayments(currentApartment?.id);
   const { data: notifications, isLoading: notiLoading } = usePaymentNotifications(currentApartment?.id);
@@ -29,8 +30,11 @@ export default function PaymentsPage() {
   const approveNotification = useApproveNotification();
   const rejectNotification = useRejectNotification();
 
-  const [activeTab, setActiveTab] = useState(searchParams.get('action') === 'create' ? 'odemeler' : 'odemeler');
-  const [showCreate, setShowCreate] = useState(searchParams.get('action') === 'create');
+  const unitParam = searchParams.get('unit');
+  const actionParam = searchParams.get('action');
+
+  const [activeTab, setActiveTab] = useState(actionParam === 'create' ? 'odemeler' : 'odemeler');
+  const [showCreate, setShowCreate] = useState(actionParam === 'create');
   const [showCancel, setShowCancel] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [showReject, setShowReject] = useState<string | null>(null);
@@ -38,7 +42,7 @@ export default function PaymentsPage() {
   const [selectedUnit, setSelectedUnit] = useState('');
 
   const [form, setForm] = useState({
-    unit_id: '',
+    unit_id: unitParam || '',
     due_id: '',
     amount: '',
     payment_date: new Date().toISOString().split('T')[0],
@@ -46,14 +50,47 @@ export default function PaymentsPage() {
     description: '',
   });
 
-  // Fetch dues for selected unit
+  // URL üzerinden action=create ve unit parametresi gelirse daireyi ve modalı hazırla
+  useEffect(() => {
+    const uParam = searchParams.get('unit');
+    const aParam = searchParams.get('action');
+    if (aParam === 'create') {
+      setShowCreate(true);
+      if (uParam) {
+        setForm((prev) => ({
+          ...prev,
+          unit_id: uParam,
+        }));
+      }
+    }
+  }, [searchParams]);
+
+  const handleCloseCreate = () => {
+    setShowCreate(false);
+    if (searchParams.get('action') || searchParams.get('unit')) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('action');
+          next.delete('unit');
+          return next;
+        },
+        { replace: true }
+      );
+    }
+  };
+
+  // Fetch dues for selected unit (henüz vadesi gelmemiş gelecek dönemler filtrelenir)
   const { data: unitDues } = useUnitDues(form.unit_id || undefined);
-  const openDues = unitDues?.filter((d: any) => d.status !== 'paid') ?? [];
+  const openDues = useMemo(() => {
+    return (unitDues ?? []).filter((d: any) => d.status !== 'paid' && isDueEligibleForUnitDebts(d));
+  }, [unitDues]);
 
   const handleSelectDue = (dueId: string) => {
     const due = openDues.find((d: any) => d.id === dueId);
     if (due) {
-      const remaining = due.amount;
+      const paid = Number(due.paid_amount || 0);
+      const remaining = due.remaining_amount ?? Math.max(0, Number(due.amount) - paid);
       setForm({ ...form, due_id: dueId, amount: remaining.toString() });
     } else {
       setForm({ ...form, due_id: dueId });
@@ -77,7 +114,7 @@ export default function PaymentsPage() {
         idempotency_key: `manual-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       });
       toast.success('Ödeme kaydedildi');
-      setShowCreate(false);
+      handleCloseCreate();
       setForm({
         unit_id: '',
         due_id: '',
@@ -260,7 +297,7 @@ export default function PaymentsPage() {
       )}
 
       {/* Create Payment Modal */}
-      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="Ödeme Kaydet">
+      <Modal isOpen={showCreate} onClose={handleCloseCreate} title="Ödeme Kaydet">
         <div className="space-y-4">
           <Select
             label="Daire *"
@@ -281,11 +318,15 @@ export default function PaymentsPage() {
               value={form.due_id}
               onChange={(e) => handleSelectDue(e.target.value)}
               options={[
-                { value: '', label: 'Borç seçin (isteğe bağlı)...' },
-                ...openDues.map((d: any) => ({
-                  value: d.id,
-                  label: `${d.description} - Kalan: ${formatCurrency(d.amount - (d.paid_amount || 0))}`,
-                })),
+                { value: '', label: 'Diğer / Genel Tahsilat' },
+                ...openDues.map((d: any) => {
+                  const paid = Number(d.paid_amount || 0);
+                  const remaining = d.remaining_amount ?? Math.max(0, Number(d.amount) - paid);
+                  return {
+                    value: d.id,
+                    label: `${d.description}${d.period ? ` (${formatPeriod(d.period)})` : ''} - Kalan: ${formatCurrency(remaining)}`,
+                  };
+                }),
               ]}
             />
           )}
@@ -318,7 +359,7 @@ export default function PaymentsPage() {
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             placeholder="İsteğe bağlı"
           />
-          <div className="flex gap-2 justify-end pt-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 [&>*]:w-full sm:[&>*]:w-auto">
             <Button variant="outline" onClick={() => setShowCreate(false)}>İptal</Button>
             <Button onClick={handleCreate} loading={createPayment.isPending}>Kaydet</Button>
           </div>
@@ -338,7 +379,7 @@ export default function PaymentsPage() {
             onChange={(e) => setCancelReason(e.target.value)}
             placeholder="İptal nedenini açıklayın"
           />
-          <div className="flex gap-2 justify-end pt-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 [&>*]:w-full sm:[&>*]:w-auto">
             <Button variant="outline" onClick={() => setShowCancel(null)}>Vazgeç</Button>
             <Button variant="danger" onClick={handleCancel} loading={cancelPayment.isPending}>İptal Et</Button>
           </div>
@@ -355,7 +396,7 @@ export default function PaymentsPage() {
             onChange={(e) => setRejectReason(e.target.value)}
             placeholder="İsteğe bağlı gerekçe"
           />
-          <div className="flex gap-2 justify-end pt-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 [&>*]:w-full sm:[&>*]:w-auto">
             <Button variant="outline" onClick={() => setShowReject(null)}>Vazgeç</Button>
             <Button variant="danger" onClick={handleReject} loading={rejectNotification.isPending}>Reddet</Button>
           </div>
