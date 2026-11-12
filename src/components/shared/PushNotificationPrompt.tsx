@@ -16,7 +16,6 @@ export function PushNotificationPrompt() {
     isSubscribed,
     platformGuidance,
     subscribe,
-    loading,
   } = usePushNotifications();
 
   const [showPwaModal, setShowPwaModal] = useState(false);
@@ -51,13 +50,15 @@ export function PushNotificationPrompt() {
   }, [user, isSupported, permission, isSubscribed, platformGuidance.isStandalone, isHomePage]);
 
   const handleEnableNotifications = async () => {
+    // Modal ve banner'ı anında kapat, spinner gösterme; sonucu arka planda toast ile bildir
+    setShowPwaModal(false);
+    setShowWebBanner(false);
+    sessionStorage.setItem('web_push_banner_dismissed', 'true');
+
     try {
       const ok = await subscribe({ throwOnError: true });
       if (!ok) return;
-      setShowPwaModal(false);
-      setShowWebBanner(false);
       localStorage.setItem('pwa_push_prompt_dismissed', 'true');
-      sessionStorage.setItem('web_push_banner_dismissed', 'true');
       toast.success('Bildirimler başarıyla açıldı! 🎉');
     } catch (err: any) {
       toast.error(err.message || 'Bildirim izni alınamadı.');
@@ -112,7 +113,6 @@ export function PushNotificationPrompt() {
             <div className="mt-6 flex flex-col gap-2">
               <Button
                 onClick={handleEnableNotifications}
-                loading={loading}
                 className="w-full font-semibold shadow-md shadow-primary-600/20"
               >
                 <Bell className="w-4 h-4 mr-1.5" />
@@ -122,7 +122,6 @@ export function PushNotificationPrompt() {
                 variant="ghost"
                 size="sm"
                 onClick={handleDismissPwaModal}
-                disabled={loading}
                 className="text-xs text-gray-500 hover:text-gray-700"
               >
                 Daha Sonra
@@ -163,7 +162,6 @@ export function PushNotificationPrompt() {
                 <Button
                   size="sm"
                   onClick={handleEnableNotifications}
-                  loading={loading}
                   className="text-xs font-semibold py-1.5 px-3 h-auto"
                 >
                   Bildirimleri Aç
@@ -172,7 +170,6 @@ export function PushNotificationPrompt() {
                   variant="ghost"
                   size="sm"
                   onClick={handleDismissWebBanner}
-                  disabled={loading}
                   className="text-xs text-gray-500 hover:text-gray-700 py-1.5 px-2.5 h-auto"
                 >
                   Şimdi Değil

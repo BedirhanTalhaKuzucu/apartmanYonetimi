@@ -152,7 +152,7 @@ export async function subscribeToPush(userId: string): Promise<PushSubscription 
     throw new Error('VAPID public key yapılandırılmamış. .env dosyasını kontrol edin.');
   }
 
-  const registration = await getActiveServiceWorkerRegistration(8000);
+  const registration = await getActiveServiceWorkerRegistration(25000);
 
   // Mevcut abonelik varsa kullan
   let subscription = await registration.pushManager.getSubscription();
@@ -207,7 +207,7 @@ export async function subscribeToPush(userId: string): Promise<PushSubscription 
 export async function unsubscribeFromPush(userId: string): Promise<void> {
   if (!isPushSupported()) return;
 
-  const registration = await getActiveServiceWorkerRegistration(8000);
+  const registration = await getActiveServiceWorkerRegistration(25000);
   const subscription = await registration.pushManager.getSubscription();
 
   if (subscription) {
