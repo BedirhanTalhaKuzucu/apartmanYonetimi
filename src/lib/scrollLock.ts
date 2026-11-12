@@ -19,6 +19,27 @@ let previousBodyStyles = {
   overflow: '',
 };
 
+/**
+ * Sayfa geçişlerinde (route change) body scroll kilidinin takılı kalma
+ * ihtimaline karşı güvenlik sıfırlaması. React.lazy + Suspense ile
+ * unmount sırasında useEffect cleanup'ın zamanlaması kaymışsa veya
+ * lockCount sıfır olmasına rağmen body hâlâ `position: fixed` ise
+ * tüm stilleri temizler.
+ */
+export function ensureBodyScrollable(): void {
+  if (typeof document === 'undefined') return;
+
+  // lockCount 0 olmalı ama body hâlâ kilitli — zorla sıfırla
+  if (lockCount === 0 && document.body.style.position === 'fixed') {
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    document.body.style.overflow = '';
+  }
+}
+
 export function lockBodyScroll(): () => void {
   if (typeof document === 'undefined') return () => {};
 
