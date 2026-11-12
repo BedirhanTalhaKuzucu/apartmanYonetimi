@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { InstallPWAPrompt } from '@/components/shared/InstallPWAPrompt';
 import { PushNotificationPrompt } from '@/components/shared/PushNotificationPrompt';
+import { ensureBodyScrollable } from '@/lib/scrollLock';
 
 /* ── Layouts ── */
 const AuthLayout = React.lazy(() => import('@/components/layout/AuthLayout'));
@@ -139,8 +140,9 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sayfa değiştiğinde üste kaydır
+  // Sayfa değiştiğinde üste kaydır & takılı scroll kilidini temizle
   useEffect(() => {
+    ensureBodyScrollable();
     window.scrollTo(0, 0);
     document.body.classList.remove('keyboard-open');
   }, [location.pathname]);

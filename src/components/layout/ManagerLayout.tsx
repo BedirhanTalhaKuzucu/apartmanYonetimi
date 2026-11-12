@@ -178,7 +178,7 @@ export default function ManagerLayout() {
       </aside>
 
       {/* ── Main Content Area (Spans remaining width) ── */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
         <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
           <div className="w-full flex items-center justify-between px-4 md:px-6 h-14">

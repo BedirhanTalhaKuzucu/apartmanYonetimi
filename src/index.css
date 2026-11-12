@@ -3,7 +3,18 @@
 @tailwind utilities;
 
 @layer base {
-  html,
+  html {
+    /* overflow-x: hidden'ı html'den kaldırıyoruz — Chrome/Android/Windows'ta
+       html üzerinde overflow-x:hidden, overflow-y'yi auto'ya çevirip
+       viewport ile body arasında çift scroll container çakışmasına yol açıyor.
+       iOS Safari viewport'u farklı yönettiği için etkilenmiyordu.
+       Yatay taşmayı sadece body engeller, yeterlidir. */
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+    max-width: 100%;
+    width: 100%;
+  }
+
   body {
     overflow-x: hidden;
     max-width: 100%;
@@ -13,22 +24,15 @@
   /* Sadece PWA (Standalone / Ana Ekrandan Açılan Uygulama) modunda lastik efektini kapat.
      Normal Chrome/Safari tarayıcı sekmesinde yenileme (pull-to-refresh) serbest kalır. */
   @media (display-mode: standalone), (display-mode: fullscreen) {
-    html,
     body {
       overscroll-behavior-y: none;
       overscroll-behavior: none;
     }
   }
 
-  html.is-standalone,
   html.is-standalone body {
     overscroll-behavior-y: none;
     overscroll-behavior: none;
-  }
-
-  html {
-    -webkit-tap-highlight-color: transparent;
-    scroll-behavior: smooth;
   }
 
   body {
