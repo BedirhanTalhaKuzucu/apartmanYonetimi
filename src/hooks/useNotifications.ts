@@ -1,15 +1,22 @@
-﻿import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/authStore';
 import type { Notification } from '@/types';
 
+// Bildirimler apartmana özgüdür; apartment_id'si olmayan eski kayıtlar tüm apartmanlarda görünür.
+const apartmentFilter = (id: string) => `apartment_id.eq.${id},apartment_id.is.null`;
+
 export function useNotifications(userId: string | undefined) {
+  const apartmentId = useAuthStore((s) => s.currentApartment?.id);
   return useQuery({
-    queryKey: ['notifications', userId],
+    queryKey: ['notifications', userId, apartmentId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('notifications')
         .select('*')
-        .eq('user_id', userId!)
+        .eq('user_id', userId!);
+      if (apartmentId) q = q.or(apartmentFilter(apartmentId));
+      const { data, error } = await q
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -22,14 +29,17 @@ export function useNotifications(userId: string | undefined) {
 }
 
 export function useUnreadCount(userId: string | undefined) {
+  const apartmentId = useAuthStore((s) => s.currentApartment?.id);
   return useQuery({
-    queryKey: ['unread-count', userId],
+    queryKey: ['unread-count', userId, apartmentId],
     queryFn: async () => {
-      const { count, error } = await supabase
+      let q = supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId!)
         .eq('is_read', false);
+      if (apartmentId) q = q.or(apartmentFilter(apartmentId));
+      const { count, error } = await q;
 
       if (error) throw error;
       return count ?? 0;
@@ -60,14 +70,17 @@ export function useMarkAsRead() {
 
 export function useMarkAllAsRead() {
   const queryClient = useQueryClient();
+  const apartmentId = useAuthStore((s) => s.currentApartment?.id);
 
   return useMutation({
     mutationFn: async (userId: string) => {
-      const { error } = await supabase
+      let q = supabase
         .from('notifications')
         .update({ is_read: true })
         .eq('user_id', userId)
         .eq('is_read', false);
+      if (apartmentId) q = q.or(apartmentFilter(apartmentId));
+      const { error } = await q;
 
       if (error) throw error;
     },

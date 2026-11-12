@@ -17,6 +17,7 @@ import Button from '@/components/ui/Button';
 import { formatDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { LucideIcon } from 'lucide-react';
+import { PushToggle } from '@/components/shared/PushToggle';
 
 const TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string; bgColor: string }> = {
   due_reminder: { icon: AlertCircle, color: 'text-amber-600', bgColor: 'bg-amber-100' },
@@ -81,6 +82,8 @@ export default function ResidentNotificationsPage() {
           </Button>
         )}
       </div>
+
+      <PushToggle />
 
       {(!notifications || notifications.length === 0) ? (
         <EmptyState

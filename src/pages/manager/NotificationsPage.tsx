@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '@/hooks/useNotifications';
 import { useAuthStore } from '@/store/authStore';
 import toast from 'react-hot-toast';
+import { PushToggle } from '@/components/shared/PushToggle';
 
 const NOTIFICATION_ICONS: Record<string, any> = {
   due_reminder: AlertTriangle,
@@ -101,6 +102,8 @@ export default function NotificationsPage() {
           </Button>
         )}
       </div>
+
+      <PushToggle />
 
       {notifications && notifications.length > 0 ? (
         <div className="space-y-2">

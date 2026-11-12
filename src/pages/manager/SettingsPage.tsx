@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Bell, Download, LogOut, Info, Smartphone, Shield } from 'lucide-react';
+import { User, Lock, Bell, Download, LogOut, Info, Smartphone, Building2 } from 'lucide-react';
+import { useUpdateApartment } from '@/hooks/useApartments';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -11,7 +12,9 @@ import { usePWAInstall, triggerPWAInstallModal } from '@/hooks/usePWAInstall';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
-  const { user, profile, signOut } = useAuthStore();
+  const { user, profile, currentApartment, signOut } = useAuthStore();
+  const updateApartment = useUpdateApartment();
+  const [apartmentName, setApartmentName] = useState('');
   const { isStandalone } = usePWAInstall();
   const [profileForm, setProfileForm] = useState({ full_name: '', phone: '' });
   const [passwordForm, setPasswordForm] = useState({ current: '', newPass: '', confirm: '' });
@@ -19,6 +22,10 @@ export default function SettingsPage() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [pushStatus, setPushStatus] = useState<'unsupported' | 'denied' | 'granted' | 'default'>('default');
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    setApartmentName(currentApartment?.name || '');
+  }, [currentApartment?.id, currentApartment?.name]);
 
   useEffect(() => {
     if (profile) {
@@ -60,6 +67,16 @@ export default function SettingsPage() {
       toast.error(err.message || 'Bir hata oluştu');
     }
     setSaving(false);
+  };
+
+  const handleSaveApartmentName = async () => {
+    const name = apartmentName.trim();
+    if (!currentApartment || !name) return;
+    try {
+      await updateApartment.mutateAsync({ id: currentApartment.id, name });
+    } catch {
+      // hata toast'ı hook içinde gösterilir
+    }
   };
 
   const handleChangePassword = async () => {
@@ -115,7 +132,30 @@ export default function SettingsPage() {
 
   return (
     <div className="p-4 space-y-6 pb-24">
-      <h1 className="text-xl font-bold">Ayarlar</h1>
+      <h1 className="text-xl font-bold">Profil</h1>
+
+      {/* Apartment name */}
+      {currentApartment && (
+        <Card className="p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-primary-600" />
+            <h2 className="font-semibold">Apartman Bilgileri</h2>
+          </div>
+          <Input
+            label="Apartman Adı"
+            value={apartmentName}
+            onChange={(e) => setApartmentName(e.target.value)}
+          />
+          <Button
+            size="sm"
+            onClick={handleSaveApartmentName}
+            loading={updateApartment.isPending}
+            disabled={!apartmentName.trim() || apartmentName.trim() === currentApartment.name}
+          >
+            Kaydet
+          </Button>
+        </Card>
+      )}
 
       {/* Profile */}
       <Card className="p-4 space-y-4">

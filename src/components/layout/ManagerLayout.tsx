@@ -9,7 +9,7 @@ import {
   Bell,
   X,
   LogOut,
-  Settings,
+  User,
   Wrench,
   Wallet,
   FileText,
@@ -42,7 +42,7 @@ const moreNavItems = [
   { to: '/yonetici/bildirimler', label: 'Bildirimler', icon: Bell },
   { to: '/yonetici/belgeler', label: 'Belgeler', icon: FileText },
   { to: '/yonetici/apartmanlar', label: 'Apartmanlar', icon: Building2 },
-  { to: '/yonetici/ayarlar', label: 'Ayarlar', icon: Settings },
+  { to: '/yonetici/ayarlar', label: 'Profil', icon: User },
 ];
 
 export default function ManagerLayout() {
