@@ -112,6 +112,20 @@ async function getActiveServiceWorkerRegistration(timeoutMs = 8000): Promise<Ser
   if (existing?.active) {
     return existing;
   }
+
+  // Kayıt yoksa aktif olarak /sw.js veya fallback /push-sw.js kaydetmeyi dene
+  if (!existing) {
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+    } catch {
+      try {
+        await navigator.serviceWorker.register('/push-sw.js');
+      } catch {
+        // ready timeout aşağıda yakalayacak
+      }
+    }
+  }
+
   return withTimeout(
     navigator.serviceWorker.ready,
     timeoutMs,
