@@ -127,7 +127,7 @@ export const PushPermissionCard: React.FC = () => {
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
           <div className="mt-3 flex items-center gap-2">
-            <Button variant="primary" size="sm" onClick={subscribe} loading={loading}>
+            <Button variant="primary" size="sm" onClick={() => subscribe()} loading={loading}>
               Bildirimleri Aç
             </Button>
             <div className="flex items-center gap-1 text-xs text-blue-600">

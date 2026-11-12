@@ -52,7 +52,8 @@ export function PushNotificationPrompt() {
 
   const handleEnableNotifications = async () => {
     try {
-      await subscribe();
+      const ok = await subscribe({ throwOnError: true });
+      if (!ok) return;
       setShowPwaModal(false);
       setShowWebBanner(false);
       localStorage.setItem('pwa_push_prompt_dismissed', 'true');

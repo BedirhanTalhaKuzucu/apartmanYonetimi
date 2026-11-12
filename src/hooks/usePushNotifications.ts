@@ -20,7 +20,7 @@ interface UsePushNotificationsReturn {
   /** Platform bazlı rehberlik bilgisi */
   platformGuidance: PlatformGuidance;
   /** Abone ol */
-  subscribe: () => Promise<void>;
+  subscribe: (options?: { throwOnError?: boolean }) => Promise<boolean>;
   /** Aboneliği iptal et */
   unsubscribe: () => Promise<void>;
   /** İşlem devam ediyor mu */
@@ -48,10 +48,12 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     }
   }, [isSupported]);
 
-  const subscribe = useCallback(async () => {
+  const subscribe = useCallback(async (options?: { throwOnError?: boolean }): Promise<boolean> => {
     if (!user?.id) {
-      setError('Abone olmak için giriş yapmanız gerekiyor.');
-      return;
+      const msg = 'Abone olmak için giriş yapmanız gerekiyor.';
+      setError(msg);
+      if (options?.throwOnError) throw new Error(msg);
+      return false;
     }
 
     setLoading(true);
@@ -62,12 +64,26 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       if (sub) {
         setIsSubscribed(true);
         setPermission('granted');
+        return true;
       } else {
-        setPermission(getPushPermission());
+        const perm = getPushPermission();
+        setPermission(perm);
+        if (options?.throwOnError) {
+          throw new Error(
+            perm === 'denied'
+              ? 'Bildirim izni tarayıcı ayarlarından engellenmiş.'
+              : 'Bildirim izni verilmedi.'
+          );
+        }
+        return false;
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Bildirim aboneliği başarısız.';
       setError(message);
+      if (options?.throwOnError) {
+        throw err instanceof Error ? err : new Error(message);
+      }
+      return false;
     } finally {
       setLoading(false);
     }
