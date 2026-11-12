@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
+import { notifyApartmentResidents } from '@/services/notificationService';
 import type { Announcement } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -67,6 +68,15 @@ export function useCreateAnnouncement() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['announcements', data.apartment_id] });
+      // Sakinlere bildirim gönder
+      notifyApartmentResidents({
+        apartmentId: data.apartment_id,
+        title: `📢 Yeni Duyuru: ${data.title}`,
+        body: data.content ? (data.content.length > 120 ? data.content.slice(0, 117) + '...' : data.content) : 'Yeni bir apartman duyurusu yayınlandı.',
+        type: 'announcement',
+        referenceType: 'announcement',
+        referenceId: data.id,
+      }).catch(() => {});
       toast.success('Duyuru yayınlandı.');
     },
     onError: (error: Error) => {

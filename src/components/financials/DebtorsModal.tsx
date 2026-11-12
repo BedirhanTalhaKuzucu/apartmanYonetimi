@@ -184,7 +184,17 @@ export function DebtorsModal({ isOpen, onClose }: DebtorsModalProps) {
 
             {/* Debtor units list */}
             <div className="divide-y-2 divide-gray-200 border-2 border-gray-200/90 rounded-xl overflow-hidden bg-white shadow-xs">
-              {debtorUnits.map((item) => (
+              {debtorUnits.map((item) => {
+                const hasResident = Boolean(item.residentName && item.residentName.trim() !== '' && item.residentName.trim() !== 'Sakin Atanmadı');
+                const unitText = `Daire ${item.unitNumber}`;
+                const blockFloorText = [
+                  item.block ? `Blok ${item.block}` : null,
+                  item.floor ? `Kat ${item.floor}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(', ');
+
+                return (
                 <div
                   key={item.unitId}
                   className="p-3.5 sm:p-4 hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white"
@@ -192,18 +202,11 @@ export function DebtorsModal({ isOpen, onClose }: DebtorsModalProps) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-bold text-gray-900 text-sm">
-                        Daire {item.unitNumber}
+                        {hasResident ? `${item.residentName} (${unitText})` : unitText}
                       </span>
-                      {(item.block || item.floor) && (
+                      {blockFloorText && (
                         <span className="text-xs text-gray-500 font-medium">
-                          (
-                          {[
-                            item.block ? `Blok ${item.block}` : null,
-                            item.floor ? `Kat ${item.floor}` : null,
-                          ]
-                            .filter(Boolean)
-                            .join(', ')}
-                          )
+                          ({blockFloorText})
                         </span>
                       )}
                       {item.overdueDebt > 0 && (
@@ -214,16 +217,21 @@ export function DebtorsModal({ isOpen, onClose }: DebtorsModalProps) {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-600 mt-1">
-                      <span className="font-medium text-gray-800">{item.residentName}</span>
-                      {item.residentRole && (
-                        <Badge variant="neutral" className="text-[10px] py-0 px-1.5">
-                          {item.residentRole}
-                        </Badge>
-                      )}
-                      {item.residentPhone && (
-                        <span className="text-gray-400 font-mono text-[11px]">
-                          {item.residentPhone}
-                        </span>
+                      {hasResident ? (
+                        <>
+                          {item.residentRole && (
+                            <Badge variant="neutral" className="text-[10px] py-0 px-1.5">
+                              {item.residentRole}
+                            </Badge>
+                          )}
+                          {item.residentPhone && (
+                            <span className="text-gray-400 font-mono text-[11px]">
+                              {item.residentPhone}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-gray-400">Sakin Atanmadı</span>
                       )}
                     </div>
 
@@ -280,7 +288,8 @@ export function DebtorsModal({ isOpen, onClose }: DebtorsModalProps) {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}

@@ -43,7 +43,7 @@ export default function ResidentDashboard() {
 
   const lastNotification = paymentNotifs?.[0];
   const recentAnnouncements = (announcements || []).slice(0, 3);
-  const openRequests = (requests || []).filter((r: any) => r.status !== 'resolved');
+  const recentRequests = (requests || []).slice(0, 3);
 
   if (duesLoading) return <LoadingSpinner />;
 
@@ -204,50 +204,64 @@ export default function ResidentDashboard() {
         )}
       </div>
 
-      {/* Open Requests */}
-      {openRequests.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200">
-          <div className="flex items-center justify-between p-4 pb-2">
-            <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-              <Wrench className="w-4 h-4 text-primary-600" />
-              Açık Taleplerim
-            </h2>
-            <button
-              onClick={() => navigate('/sakin/talepler')}
-              className="text-sm text-primary-600 font-medium flex items-center gap-1"
-            >
-              Tümü
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+      {/* Recent Requests */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="flex items-center justify-between p-4 pb-2">
+          <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <Wrench className="w-4 h-4 text-primary-600" />
+            Son Taleplerim
+          </h2>
+          <button
+            onClick={() => navigate('/sakin/talepler')}
+            className="text-sm text-primary-600 font-medium flex items-center gap-1"
+          >
+            Tümü
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {recentRequests.length === 0 ? (
+          <p className="px-4 pb-4 text-sm text-gray-500">Henüz talep bulunmuyor.</p>
+        ) : (
           <div className="divide-y divide-gray-100">
-            {openRequests.slice(0, 3).map((r: any) => (
+            {recentRequests.map((r: any) => (
               <div
                 key={r.id}
                 className="px-4 py-3 cursor-pointer hover:bg-gray-50 active:bg-gray-50"
                 onClick={() => navigate(`/sakin/talepler?id=${r.id}`)}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{r.title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{r.category}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {r.category ? `${r.category} · ` : ''}{formatDate(r.created_at)}
+                    </p>
                   </div>
                   <StatusBadge status={r.status} />
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Quick Action */}
-      <button
-        onClick={() => navigate('/sakin/talepler/yeni')}
-        className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-      >
-        <Wrench className="w-4 h-4" />
-        Yeni Arıza / Talep Oluştur
-      </button>
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <button
+          onClick={() => navigate('/sakin/talepler')}
+          className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-xl hover:bg-primary-100 transition-colors"
+        >
+          <Wrench className="w-4 h-4" />
+          Taleplerim Sayfasına Git
+        </button>
+        <button
+          onClick={() => navigate('/sakin/talepler/yeni')}
+          className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+        >
+          <Wrench className="w-4 h-4" />
+          Yeni Arıza / Talep Oluştur
+        </button>
+      </div>
     </div>
   );
 }

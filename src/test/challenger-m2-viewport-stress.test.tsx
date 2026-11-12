@@ -152,8 +152,8 @@ describe('CHALLENGER M2_2: Mobile Viewport & Modals Empirical Stress Suite', () 
         expect(footerContainer.className).toContain('sm:[&>*]:w-auto');
 
         // Debtor list items flex wrap and truncation
-        expect(screen.getByText('Daire 4')).toBeInTheDocument();
-        expect(screen.getByText('Daire 12')).toBeInTheDocument();
+        expect(screen.getByText(/Daire 4/)).toBeInTheDocument();
+        expect(screen.getByText(/Daire 12/)).toBeInTheDocument();
         expect(screen.getByText(/Ahmet Yılmaz/)).toBeInTheDocument();
       });
     });

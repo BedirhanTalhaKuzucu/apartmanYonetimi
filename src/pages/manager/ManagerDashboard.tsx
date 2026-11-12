@@ -12,6 +12,10 @@ import {
   Scale,
   FileText,
   Download,
+  Bell,
+  Wrench,
+  UserCheck,
+  CheckCheck,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -22,7 +26,7 @@ import { Input } from '@/components/ui/Input';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency, formatDate, formatShortDate } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { cn, formatUnitOptionLabel } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import {
   useDashboardStats,
@@ -30,6 +34,7 @@ import {
   useRecentRequests,
   useRecentAnnouncements,
 } from '@/hooks/useDashboard';
+import { useNotifications, useMarkAllAsRead } from '@/hooks/useNotifications';
 import { usePayments } from '@/hooks/usePayments';
 import { usePaymentNotifications } from '@/hooks/usePaymentNotifications';
 import { useUnits } from '@/hooks/useUnits';
@@ -43,9 +48,42 @@ import {
 } from '@/lib/pdf';
 import toast from 'react-hot-toast';
 
+const NOTIFICATION_META: Record<string, { icon: any; color: string; bg: string; badge: string }> = {
+  request_created: {
+    icon: Wrench,
+    color: 'text-amber-700',
+    bg: 'bg-amber-100',
+    badge: 'Yeni Talep',
+  },
+  payment_notification: {
+    icon: CreditCard,
+    color: 'text-emerald-700',
+    bg: 'bg-emerald-100',
+    badge: 'Ödeme Bildirimi',
+  },
+  invitation_accepted: {
+    icon: UserCheck,
+    color: 'text-indigo-700',
+    bg: 'bg-indigo-100',
+    badge: 'Yeni Sakin',
+  },
+  announcement: {
+    icon: Megaphone,
+    color: 'text-blue-700',
+    bg: 'bg-blue-100',
+    badge: 'Duyuru',
+  },
+  due_reminder: {
+    icon: AlertTriangle,
+    color: 'text-rose-700',
+    bg: 'bg-rose-100',
+    badge: 'Aidat & Borç',
+  },
+};
+
 export default function ManagerDashboard() {
   const navigate = useNavigate();
-  const { currentApartment } = useAuthStore();
+  const { user, currentApartment } = useAuthStore();
   const [quickActionModalOpen, setQuickActionModalOpen] = useState(false);
 
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
@@ -53,6 +91,11 @@ export default function ManagerDashboard() {
   const { data: recentRequests } = useRecentRequests();
   const { data: recentAnnouncements } = useRecentAnnouncements();
   const { data: paymentNotifications } = usePaymentNotifications(currentApartment?.id);
+  const { data: notifications } = useNotifications(user?.id);
+  const markAllRead = useMarkAllAsRead();
+
+  const unreadNotifications = notifications?.filter((n: any) => !n.is_read) || [];
+  const latestNotif = unreadNotifications[0];
 
   if (!currentApartment) {
     return (
@@ -125,8 +168,82 @@ export default function ManagerDashboard() {
         </Button>
       </div>
 
-      {/* Pending Payment Notifications Alert Banner */}
-      {pendingPaymentCount > 0 && (
+      {/* Unread Notifications Interactive Banner (Okunduğunda veya kapatıldığında anında kaybolur) */}
+      {unreadNotifications.length > 0 && latestNotif && (
+        <div className="relative overflow-hidden bg-gradient-to-r from-primary-50/90 via-blue-50/60 to-white border border-primary-200 border-l-4 border-l-primary-600 rounded-xl p-4 shadow-sm animate-fade-in">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div
+              className="flex items-start gap-3 cursor-pointer flex-1 min-w-0"
+              onClick={() => navigate('/yonetici/bildirimler')}
+            >
+              <div
+                className={cn(
+                  'p-2.5 rounded-lg shrink-0 mt-0.5 sm:mt-0',
+                  NOTIFICATION_META[latestNotif.type]?.bg || 'bg-primary-100',
+                  NOTIFICATION_META[latestNotif.type]?.color || 'text-primary-700'
+                )}
+              >
+                {(() => {
+                  const Icon = NOTIFICATION_META[latestNotif.type]?.icon || Bell;
+                  return <Icon className="w-5 h-5" />;
+                })()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold text-gray-900 truncate">
+                    {latestNotif.title}
+                  </h3>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary-100 text-primary-800 uppercase tracking-wide">
+                    {NOTIFICATION_META[latestNotif.type]?.badge || 'Yeni Bildirim'}
+                  </span>
+                  {unreadNotifications.length > 1 && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-200 text-gray-700">
+                      +{unreadNotifications.length - 1} diğer bildirim
+                    </span>
+                  )}
+                </div>
+                {latestNotif.body && (
+                  <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                    {latestNotif.body}
+                  </p>
+                )}
+                <p className="text-[11px] text-gray-400 mt-1">
+                  {formatDate(latestNotif.created_at)} • Sayfaya gitmek için tıklayın
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (user?.id) {
+                    await markAllRead.mutateAsync(user.id);
+                    toast.success('Bildirimler okundu sayıldı.');
+                  }
+                }}
+                className="text-xs text-gray-600 hover:text-gray-900 border-gray-300"
+                title="Tümünü Okundu Say ve Kapat"
+              >
+                <CheckCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                Okundu Say
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => navigate('/yonetici/bildirimler')}
+                className="text-xs font-semibold shadow-sm"
+              >
+                Bildirimleri İncele <ArrowRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Payment Notifications Alert Banner (Eğer okunmamış bildirim container'ı yoksa ancak onay bekleyen ödeme varsa göster) */}
+      {unreadNotifications.length === 0 && pendingPaymentCount > 0 && (
         <div className="bg-gradient-to-r from-amber-50 via-amber-50/60 to-white border border-amber-300 border-l-4 border-l-amber-500 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
           <div className="flex items-start gap-3">
             <div className="p-2.5 bg-amber-100 text-amber-700 rounded-lg shrink-0 mt-0.5 sm:mt-0">
@@ -240,8 +357,12 @@ export default function ManagerDashboard() {
               {recentPayments.map((payment: any) => (
                 <div key={payment.id} className="p-3 flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium">Daire {payment.unit?.unit_number}</p>
-                    <p className="text-xs text-gray-500">{formatShortDate(payment.payment_date)}</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {formatUnitOptionLabel(payment.units || payment.unit)}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatShortDate(payment.payment_date)}
+                    </p>
                   </div>
                   <span className="text-sm font-semibold text-green-600">
                     {formatCurrency(payment.amount)}
@@ -264,17 +385,20 @@ export default function ManagerDashboard() {
           </div>
           {recentRequests && recentRequests.length > 0 ? (
             <Card className="divide-y divide-gray-100">
-              {recentRequests.map((req: any) => (
+              {recentRequests.map((req: any) => {
+                const uLabel = formatUnitOptionLabel(req.units || req.unit);
+                return (
                 <div key={req.id} className="p-3 flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium">{req.title}</p>
-                    <p className="text-xs text-gray-500">Daire {req.unit?.unit_number} · {formatShortDate(req.created_at)}</p>
+                    <p className="text-xs text-gray-500">{uLabel} · {formatShortDate(req.created_at)}</p>
                   </div>
                   <Badge variant={req.status === 'new' ? 'warning' : req.status === 'in_progress' ? 'info' : 'success'}>
                     {req.status === 'new' ? 'Yeni' : req.status === 'in_progress' ? 'İnceleniyor' : 'Çözüldü'}
                   </Badge>
                 </div>
-              ))}
+                );
+              })}
             </Card>
           ) : (
             <Card className="p-4 text-center text-sm text-gray-400">Yeni talep yok</Card>

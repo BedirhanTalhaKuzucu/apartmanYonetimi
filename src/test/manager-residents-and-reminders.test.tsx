@@ -19,6 +19,8 @@ import * as resContextHooks from '@/hooks/useResidentContext';
 import * as paymentHooks from '@/hooks/usePayments';
 import * as announcementHooks from '@/hooks/useAnnouncements';
 import * as requestHooks from '@/hooks/useRequests';
+import { sortUnitResidents, getPrimaryResident } from '@/lib/utils';
+import * as pdfLib from '@/lib/pdf';
 
 // Mock react-hot-toast
 vi.mock('react-hot-toast', () => ({
@@ -122,7 +124,7 @@ describe('Manager Residents Management & Smart Reminder Selection Suite', () => 
       const sakinlerTab = screen.getByRole('button', { name: /Sakinler/i });
       fireEvent.click(sakinlerTab);
 
-      expect(screen.getByText('Ahmet Yılmaz')).toBeInTheDocument();
+      expect(screen.getAllByText('Ahmet Yılmaz').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Zeynep Yılmaz')).toBeInTheDocument();
 
       // Check edit and delete buttons exist
@@ -616,7 +618,7 @@ describe('Manager Residents Management & Smart Reminder Selection Suite', () => 
       // DeleteUnitModal should be displayed with details
       expect(screen.getByText(/Bu işlem kalıcıdır ve geri alınamaz!/i)).toBeInTheDocument();
       expect(screen.getByText(/daire kaydını apartmandan kalıcı olarak silmek üzeresiniz/i)).toBeInTheDocument();
-      expect(screen.getByText('Cemil Demir')).toBeInTheDocument();
+      expect(screen.getAllByText('Cemil Demir').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText(/Sakinlerin sistem kullanıcı hesapları silinmez/i)).toBeInTheDocument();
 
       // Click the final confirmation button
@@ -667,7 +669,7 @@ describe('Manager Residents Management & Smart Reminder Selection Suite', () => 
         </QueryClientProvider>
       );
 
-      expect(screen.getByText('A Blok Daire 3')).toBeInTheDocument();
+      expect(screen.getByText('Kemal Sunal (A Blok Daire 3)')).toBeInTheDocument();
 
       // Deletion is strictly prohibited on the list container; must not exist
       expect(screen.queryByTitle('Daireyi Sil')).not.toBeInTheDocument();
@@ -704,6 +706,199 @@ describe('Manager Residents Management & Smart Reminder Selection Suite', () => 
       expect(
         screen.getByText(/Bu apartmanda şu an adınıza tanımlı aktif bir daire bulunmuyor/i)
       ).toBeInTheDocument();
+    });
+  });
+
+  describe('Ana Sakin Sıralaması ve Çoklu Sakin Makbuz Seçimi', () => {
+    it('sortUnitResidents ve getPrimaryResident ilk eklenen aktif sakini ana sakin olarak seçer', () => {
+      const residents = [
+        {
+          id: 'ur-2',
+          is_active: true,
+          created_at: '2026-02-10T10:00:00Z',
+          profiles: { full_name: 'İkinci Sakin' },
+        },
+        {
+          id: 'ur-0',
+          is_active: false,
+          created_at: '2025-12-01T10:00:00Z',
+          profiles: { full_name: 'Eski Pasif Sakin' },
+        },
+        {
+          id: 'ur-1',
+          is_active: true,
+          created_at: '2026-01-05T10:00:00Z',
+          profiles: { full_name: 'Ana Sakin Ali' },
+        },
+      ];
+
+      const sorted = sortUnitResidents(residents);
+      expect(sorted[0].id).toBe('ur-1');
+      expect(sorted[1].id).toBe('ur-2');
+      expect(sorted[2].id).toBe('ur-0');
+      expect(getPrimaryResident(residents)?.id).toBe('ur-1');
+    });
+
+    it('DuesPage aidat kartında dairenin ilk aktif sakininin adını gösterir', () => {
+      const now = new Date();
+      const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      vi.spyOn(duesHooks, 'useDues').mockReturnValue({
+        data: [
+          {
+            id: 'due-primary-1',
+            unit_id: 'u-1',
+            due_type: 'aidat',
+            period: currentPeriod,
+            description: 'Kasım Aidatı',
+            amount: 1500,
+            paid_amount: 0,
+            due_date: `${currentPeriod}-15`,
+            status: 'pending',
+            units: { unit_number: '5', block: 'A', floor: 2 },
+            payments: [],
+          },
+        ],
+        isLoading: false,
+      } as any);
+
+      vi.spyOn(unitHooks, 'useUnits').mockReturnValue({
+        data: [
+          {
+            id: 'u-1',
+            unit_number: '5',
+            block: 'A',
+            unit_residents: [
+              {
+                id: 'ur-2',
+                is_active: true,
+                created_at: '2026-02-01T10:00:00Z',
+                profiles: { full_name: 'Sonradan Eklenen Sakin', phone: '5552223344' },
+              },
+              {
+                id: 'ur-1',
+                is_active: true,
+                created_at: '2026-01-01T10:00:00Z',
+                profiles: { full_name: 'Birinci Ana Sakin', phone: '5551112233' },
+              },
+            ],
+          },
+        ],
+        isLoading: false,
+      } as any);
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <DuesPage />
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      expect(screen.getByText('Birinci Ana Sakin (A Blok Daire 5)')).toBeInTheDocument();
+    });
+
+    it('UnitDetailPage ilk aktif sakine Ana Sakin rozeti gösterir ve birden fazla sakin varken Makbuz PDF seçimi sorar', async () => {
+      const receiptSpy = vi.spyOn(pdfLib, 'generatePaymentReceipt').mockReturnValue({} as any);
+      vi.spyOn(pdfLib, 'downloadPdf').mockImplementation(() => {});
+
+      vi.spyOn(unitHooks, 'useUnitDetail').mockReturnValue({
+        data: {
+          id: 'u-1',
+          unit_number: '7',
+          block: 'B',
+          floor: 3,
+          unit_type: '3+1',
+          land_share: 25,
+          is_occupied: true,
+        },
+        isLoading: false,
+      } as any);
+
+      vi.spyOn(residentHooks, 'useUnitResidents').mockReturnValue({
+        data: [
+          {
+            id: 'ur-2',
+            user_id: 'usr-2',
+            resident_type: 'tenant',
+            is_active: true,
+            created_at: '2026-02-01T10:00:00Z',
+            profiles: { id: 'usr-2', full_name: 'İkinci Sakin Mehmet', phone: '5552223344' },
+          },
+          {
+            id: 'ur-1',
+            user_id: 'usr-1',
+            resident_type: 'owner',
+            is_active: true,
+            created_at: '2026-01-01T10:00:00Z',
+            profiles: { id: 'usr-1', full_name: 'Ana Sakin Zeynep', phone: '5551112233' },
+          },
+        ],
+        isLoading: false,
+      } as any);
+
+      vi.spyOn(duesHooks, 'useUnitDues').mockReturnValue({
+        data: [
+          {
+            id: 'due-paid-1',
+            unit_id: 'u-1',
+            due_type: 'aidat',
+            period: '2026-03',
+            amount: 1000,
+            paid_amount: 1000,
+            due_date: '2026-03-15',
+            status: 'paid',
+          },
+        ],
+        isLoading: false,
+      } as any);
+
+      vi.spyOn(paymentHooks, 'useUnitPayments').mockReturnValue({
+        data: [
+          {
+            id: 'pay-1',
+            unit_id: 'u-1',
+            due_id: 'due-paid-1',
+            amount: 1000,
+            payment_date: '2026-03-10',
+            payment_method: 'bank_transfer',
+            receipt_no: 'MKB-001',
+            status: 'active',
+          },
+        ],
+        isLoading: false,
+      } as any);
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/yonetici/daire/u-1']}>
+            <Routes>
+              <Route path="/yonetici/daire/:id" element={<UnitDetailPage />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      // Sakinler sekmesine geç ve Ana Sakin rozetini kontrol et
+      fireEvent.click(screen.getByRole('button', { name: /Sakinler/i }));
+      expect(screen.getByText('Ana Sakin')).toBeInTheDocument();
+
+      // Ödemeler sekmesine geç ve Makbuz PDF tıkla -> Seçim modalı açılmalı
+      fireEvent.click(screen.getByRole('button', { name: /Ödemeler/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Makbuz PDF/i }));
+
+      expect(screen.getByText('Makbuz İçin Sakin Seçin')).toBeInTheDocument();
+
+      // İkinci sakini seçtiğimizde PDF o sakinin adıyla oluşturulmalı
+      fireEvent.click(screen.getByText('İkinci Sakin Mehmet'));
+      await waitFor(() => {
+        expect(receiptSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payerName: 'İkinci Sakin Mehmet',
+            receiptNo: 'MKB-001',
+          })
+        );
+      });
     });
   });
 });

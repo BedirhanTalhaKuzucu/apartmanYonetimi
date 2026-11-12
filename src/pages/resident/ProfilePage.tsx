@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Phone,
   Home,
+  Building2,
   Lock,
   Bell,
   BellOff,
@@ -22,11 +24,13 @@ import { Input } from '@/components/ui/Input';
 import { PhoneInput } from '@/components/ui/PhoneInput';
 import Modal from '@/components/ui/Modal';
 import { formatCurrency, formatPhone, parsePhoneToE164 } from '@/lib/format';
+import { subscribeToPush } from '@/lib/pushNotifications';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 
 export default function ProfilePage() {
-  const { user, profile, currentApartment, signOut, refreshProfile } = useAuthStore();
+  const navigate = useNavigate();
+  const { user, profile, currentApartment, apartmentMemberships, signOut, refreshProfile } = useAuthStore();
 
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(profile?.full_name || '');
@@ -138,16 +142,20 @@ export default function ProfilePage() {
     }
 
     try {
-      const result = await Notification.requestPermission();
-      setPushPermission(result);
-
-      if (result === 'granted') {
-        toast.success('Bildirimler etkinleştirildi!');
-      } else if (result === 'denied') {
-        toast.error('Bildirim izni reddedildi. Tarayıcı ayarlarından değiştirebilirsiniz.');
+      if (user?.id) {
+        const sub = await subscribeToPush(user.id);
+        if (sub) {
+          setPushPermission('granted');
+          toast.success('Bildirimler etkinleştirildi!');
+        } else {
+          setPushPermission(Notification.permission);
+          if (Notification.permission === 'denied') {
+            toast.error('Bildirim izni reddedildi. Tarayıcı ayarlarından değiştirebilirsiniz.');
+          }
+        }
       }
-    } catch {
-      toast.error('Bildirim izni alınamadı.');
+    } catch (err: any) {
+      toast.error(err.message || 'Bildirim izni alınamadı.');
     }
   };
 
@@ -347,15 +355,29 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Home className="w-4 h-4 text-gray-400" />
-            <div>
-              <p className="text-xs text-gray-500">Apartman & Daire</p>
-              <p className="text-sm font-medium text-gray-900">
-                {currentApartment?.name || '—'}
-              </p>
+          <button
+            type="button"
+            onClick={() => navigate('/sakin/apartmanlar')}
+            className="w-full flex items-center justify-between gap-3 pt-1 text-left group cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <Building2 className="w-4 h-4 text-primary-600 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs text-gray-500">Aktif Apartman</p>
+                <p className="text-sm font-medium text-gray-900 group-hover:text-primary-600 transition-colors truncate">
+                  {currentApartment?.name || '—'}
+                </p>
+              </div>
             </div>
-          </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-0.5 rounded-md">
+                {apartmentMemberships.length > 1
+                  ? `${apartmentMemberships.length} Apartman • Değiştir`
+                  : 'Apartmanlarım'}
+              </span>
+              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-primary-600" />
+            </div>
+          </button>
         </div>
       </div>
 

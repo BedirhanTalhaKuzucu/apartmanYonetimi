@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { usePWAInstall, triggerPWAInstallModal } from '@/hooks/usePWAInstall';
 import { usePaymentNotifications } from '@/hooks/usePaymentNotifications';
+import { useUnreadCount } from '@/hooks/useNotifications';
 import { lockBodyScroll } from '@/lib/scrollLock';
 
 const mainNavItems = [
@@ -38,20 +39,23 @@ const moreNavItems = [
   { to: '/yonetici/duyurular', label: 'Duyurular', icon: Megaphone },
   { to: '/yonetici/odemeler', label: 'Ödemeler', icon: Wallet },
   { to: '/yonetici/talepler', label: 'Talepler', icon: Wrench },
+  { to: '/yonetici/bildirimler', label: 'Bildirimler', icon: Bell },
   { to: '/yonetici/belgeler', label: 'Belgeler', icon: FileText },
   { to: '/yonetici/apartmanlar', label: 'Apartmanlar', icon: Building2 },
   { to: '/yonetici/ayarlar', label: 'Ayarlar', icon: Settings },
 ];
 
 export default function ManagerLayout() {
-  const { profile, currentApartment, managedApartments, setCurrentApartment, signOut } =
+  const { user, profile, currentApartment, managedApartments, setCurrentApartment, signOut } =
     useAuthStore();
   const navigate = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
   const [sideOpen, setSideOpen] = useState(true);
   const { isStandalone } = usePWAInstall();
   const { data: notifications } = usePaymentNotifications(currentApartment?.id);
+  const { data: unreadCount } = useUnreadCount(user?.id);
   const pendingCount = notifications?.filter((n: any) => n.status === 'pending').length ?? 0;
+  const totalUnreadCount = Math.max(unreadCount ?? 0, pendingCount);
 
   // Body scroll kilidi - "Daha Fazla" menüsü açıkken arkaplanın kaymasını iOS Safari dahil %100 engelle
   useEffect(() => {
@@ -99,6 +103,7 @@ export default function ManagerLayout() {
         <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-1">
           {[...mainNavItems, ...moreNavItems].map((item) => {
             const isPayments = item.to === '/yonetici/odemeler';
+            const isNotifications = item.to === '/yonetici/bildirimler';
             return (
               <NavLink
                 key={item.to}
@@ -120,6 +125,11 @@ export default function ManagerLayout() {
                 {isPayments && pendingCount > 0 && (
                   <span className="flex h-5 min-w-5 px-1.5 items-center justify-center rounded-full bg-amber-500 text-[11px] font-bold text-white shadow-2xs">
                     {pendingCount}
+                  </span>
+                )}
+                {isNotifications && totalUnreadCount > 0 && (
+                  <span className="flex h-5 min-w-5 px-1.5 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white shadow-2xs">
+                    {totalUnreadCount}
                   </span>
                 )}
               </NavLink>
@@ -224,14 +234,14 @@ export default function ManagerLayout() {
                 </button>
               )}
               <NavLink
-                to="/yonetici/odemeler?tab=bildirimler"
+                to="/yonetici/bildirimler"
                 className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
-                title={pendingCount > 0 ? `${pendingCount} Onay Bekleyen Ödeme Bildirimi` : 'Bildirimler'}
+                title={totalUnreadCount > 0 ? `${totalUnreadCount} Okunmamış Bildirim` : 'Bildirimler'}
               >
                 <Bell className="h-5 w-5" />
-                {pendingCount > 0 && (
+                {totalUnreadCount > 0 && (
                   <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow-xs">
-                    {pendingCount}
+                    {totalUnreadCount}
                   </span>
                 )}
               </NavLink>
@@ -275,7 +285,7 @@ export default function ManagerLayout() {
         >
           <div className="relative inline-flex items-center justify-center">
             <Menu className="h-5 w-5" />
-            {pendingCount > 0 && (
+            {totalUnreadCount > 0 && (
               <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white" />
             )}
           </div>
@@ -307,6 +317,7 @@ export default function ManagerLayout() {
             <nav className="px-3 pb-6 space-y-1">
               {moreNavItems.map((item) => {
                 const isPayments = item.to === '/yonetici/odemeler';
+                const isNotifications = item.to === '/yonetici/bildirimler';
                 return (
                   <NavLink
                     key={item.to}
@@ -328,6 +339,11 @@ export default function ManagerLayout() {
                     {isPayments && pendingCount > 0 && (
                       <span className="flex h-5 px-2 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white shadow-2xs">
                         {pendingCount} onay bekliyor
+                      </span>
+                    )}
+                    {isNotifications && totalUnreadCount > 0 && (
+                      <span className="flex h-5 px-2 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white shadow-2xs">
+                        {totalUnreadCount} yeni
                       </span>
                     )}
                   </NavLink>

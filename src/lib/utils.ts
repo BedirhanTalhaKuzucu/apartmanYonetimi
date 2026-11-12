@@ -237,4 +237,151 @@ export function parseAttachmentUrls(attachmentUrl: string | null | undefined): s
   return [trimmed];
 }
 
+/**
+ * Daire sakinlerini sıralar ve mükerrer user_id kayıtlarını ayıklar:
+ * Aktif sakinler önce gelir ve kendi içinde en erken eklenen (created_at ASC) ilk sakin "ana sakin" olur.
+ */
+export function sortUnitResidents<
+  T extends { user_id?: string | null; created_at?: string | null; is_active?: boolean | null }
+>(residents: T[] | null | undefined): T[] {
+  if (!residents || residents.length === 0) return [];
+
+  // 1. Aynı user_id'ye sahip mükerrer kayıtlar varsa ilk / aktif olanı tut
+  const seenUsers = new Set<string>();
+  const deduped: T[] = [];
+  for (const r of residents) {
+    if (r.user_id) {
+      if (seenUsers.has(r.user_id)) continue;
+      seenUsers.add(r.user_id);
+    }
+    deduped.push(r);
+  }
+
+  return [...deduped].sort((a, b) => {
+    const aActive = a.is_active !== false ? 1 : 0;
+    const bActive = b.is_active !== false ? 1 : 0;
+    if (aActive !== bActive) return bActive - aActive;
+
+    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return aTime - bTime;
+  });
+}
+
+/**
+ * Bir dairenin ilk (ana) sakinini döndürür.
+ */
+export function getPrimaryResident<
+  T extends { created_at?: string | null; is_active?: boolean | null }
+>(residents: T[] | null | undefined): T | undefined {
+  return sortUnitResidents(residents)[0];
+}
+
+/**
+ * Sakin kaydından okunabilir isim döndürür.
+ */
+export function getResidentDisplayName(resident: any): string {
+  if (!resident) return '';
+  return (
+    resident.full_name?.trim() ||
+    resident.profiles?.full_name?.trim() ||
+    ''
+  );
+}
+
+/**
+ * Daire numarası ve blok bilgisini okunabilir biçimde döndürür:
+ * Örn: "A Blok Daire 3" veya "Daire 3"
+ */
+export function formatUnitLabel(
+  unit: { block?: string | null; unit_number?: string | null } | null | undefined
+): string {
+  if (!unit?.unit_number) return '';
+  return `${unit.block ? `${unit.block} Blok ` : ''}Daire ${unit.unit_number}`;
+}
+
+/**
+ * Bir daire için aktif (ana) sakinin adını bulur (atanmamışsa null).
+ */
+export function getActiveUnitResidentName(
+  unit: {
+    unit_residents?: any[] | null;
+    residents?: any[] | null;
+  } | null | undefined
+): string | null {
+  if (!unit) return null;
+  const list = unit.unit_residents ?? unit.residents ?? [];
+  const active = sortUnitResidents(list).filter((r: any) => r.is_active !== false);
+  const primary = active[0];
+  if (!primary) return null;
+  const name = getResidentDisplayName(primary);
+  return name || null;
+}
+
+/**
+ * Bir daire için birincil başlık (primary) ve alt başlık (subtitle) döndürür:
+ * - Eğer aktif sakin atanmışsa:
+ *   - primary: Sakin Adı Soyadı (örn: "Ahmet Yılmaz")
+ *   - subtitle: Daire Etiketi (örn: "A Blok Daire 3")
+ * - Eğer sakin atanmamışsa:
+ *   - primary: Daire Etiketi (örn: "A Blok Daire 3")
+ *   - subtitle: null
+ */
+export function getUnitDisplayParts(
+  unit: {
+    block?: string | null;
+    unit_number?: string | null;
+    unit_residents?: any[] | null;
+    residents?: any[] | null;
+  } | null | undefined,
+  explicitResidentName?: string | null
+): {
+  primary: string;
+  subtitle: string | null;
+  unitLabel: string;
+  residentName: string | null;
+} {
+  const unitLabel = formatUnitLabel(unit);
+  const cleanedExplicit =
+    explicitResidentName &&
+    explicitResidentName.trim() !== '' &&
+    explicitResidentName.trim() !== 'Sakin Atanmadı'
+      ? explicitResidentName.trim()
+      : null;
+  const residentName = cleanedExplicit || getActiveUnitResidentName(unit);
+
+  if (residentName) {
+    return {
+      primary: residentName,
+      subtitle: unitLabel || null,
+      unitLabel,
+      residentName,
+    };
+  }
+
+  return {
+    primary: unitLabel || 'Daire',
+    subtitle: null,
+    unitLabel,
+    residentName: null,
+  };
+}
+
+/**
+ * Select dropdown veya tek satırlık metinler için birleşik etiket döndürür:
+ * - Sakin varsa: "Ahmet Yılmaz (A Blok Daire 3)"
+ * - Sakin yoksa: "A Blok Daire 3"
+ */
+export function formatUnitOptionLabel(
+  unit: {
+    block?: string | null;
+    unit_number?: string | null;
+    unit_residents?: any[] | null;
+    residents?: any[] | null;
+  } | null | undefined,
+  explicitResidentName?: string | null
+): string {
+  const { primary, subtitle } = getUnitDisplayParts(unit, explicitResidentName);
+  return subtitle ? `${primary} (${subtitle})` : primary;
+}
 

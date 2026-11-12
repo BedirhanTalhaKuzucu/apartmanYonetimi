@@ -223,9 +223,8 @@ describe('CHALLENGER M2: Debtors Modal Empirical & Parity Verification', () => {
       expect(screen.getByText(/4\.700/)).toBeInTheDocument();
 
       // Unit 1 details
-      expect(screen.getByText('Daire 4')).toBeInTheDocument();
+      expect(screen.getByText('Mehmet Yılmaz (Daire 4)')).toBeInTheDocument();
       expect(screen.getByText('(Blok A, Kat 2)')).toBeInTheDocument();
-      expect(screen.getByText('Mehmet Yılmaz')).toBeInTheDocument();
       expect(screen.getByText('Ev Sahibi')).toBeInTheDocument();
       expect(screen.getByText('0532 111 2233')).toBeInTheDocument();
       expect(screen.getByText(/1\.500.*Gecikmiş/)).toBeInTheDocument();
@@ -236,8 +235,7 @@ describe('CHALLENGER M2: Debtors Modal Empirical & Parity Verification', () => {
       expect(screen.getAllByText(/Kasım 2026/i).length).toBeGreaterThanOrEqual(1);
 
       // Unit 2 details
-      expect(screen.getByText('Daire 8')).toBeInTheDocument();
-      expect(screen.getByText('Ayşe Demir')).toBeInTheDocument();
+      expect(screen.getByText('Ayşe Demir (Daire 8)')).toBeInTheDocument();
       expect(screen.getByText('Kiracı')).toBeInTheDocument();
       expect(screen.getByText('0555 999 8877')).toBeInTheDocument();
       expect(screen.getByText(/1\.200/)).toBeInTheDocument();
@@ -476,8 +474,7 @@ describe('CHALLENGER M2: Debtors Modal Empirical & Parity Verification', () => {
 
       // Now the modal must be mounted in the DOM!
       expect(screen.getByText('Borçlu Daireler & Bekleyen Tahsilatlar')).toBeInTheDocument();
-      expect(screen.getByText('Burak Açık')).toBeInTheDocument();
-      expect(screen.getByText('Daire 14')).toBeInTheDocument();
+      expect(screen.getByText('Burak Açık (Daire 14)')).toBeInTheDocument();
     });
 
     it('mounts DebtorsModal cleanly when clicking the "Borçlu Daireler →" link in the balance summary', () => {

@@ -86,7 +86,7 @@ export default function ResidentRequestsPage() {
 }
 
 function RequestDetail({ request, onBack }: { request: Record<string, any>; onBack: () => void }) {
-  const { data: comments, isLoading: commentsLoading } = useRequestComments(request.id);
+  const { data: comments, isLoading: commentsLoading } = useRequestComments(request.id, request.apartment_id);
   const addComment = useAddComment();
   const [newComment, setNewComment] = useState('');
   const [sendingComment, setSendingComment] = useState(false);
@@ -99,6 +99,10 @@ function RequestDetail({ request, onBack }: { request: Record<string, any>; onBa
       await addComment.mutateAsync({
         request_id: request.id,
         content: newComment.trim(),
+        apartment_id: request.apartment_id,
+        unit_id: request.unit_id,
+        request_title: request.title,
+        request_created_by: request.created_by,
       });
       setNewComment('');
     } catch {
@@ -230,22 +234,29 @@ function RequestDetail({ request, onBack }: { request: Record<string, any>; onBa
           <p className="px-4 pb-4 text-sm text-gray-500">Henüz yorum yok.</p>
         ) : (
           <div className="divide-y divide-gray-100 px-4">
-            {comments.map((comment: any) => (
-              <div key={comment.id} className="py-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold">
-                    {comment.profiles?.full_name?.[0]?.toUpperCase() || '?'}
+            {comments.map((comment: any) => {
+              const rawName = comment.profiles?.full_name?.trim() || comment.user?.full_name?.trim() || '';
+              const authorName = rawName || (comment.is_manager ? 'Apartman Yöneticisi' : 'Kullanıcı');
+              return (
+                <div key={comment.id} className="py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold shrink-0">
+                      {authorName[0]?.toUpperCase() || '?'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {authorName}
+                        {comment.is_manager && rawName && (
+                          <span className="ml-1 text-primary-700 font-semibold">(Yönetici)</span>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-gray-400">{formatDateTime(comment.created_at)}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {comment.profiles?.full_name || 'Kullanıcı'}
-                    </p>
-                    <p className="text-[10px] text-gray-400">{formatDateTime(comment.created_at)}</p>
-                  </div>
+                  <p className="text-sm text-gray-700 mt-1.5 ml-9">{comment.content}</p>
                 </div>
-                <p className="text-sm text-gray-700 mt-1.5 ml-9">{comment.content}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

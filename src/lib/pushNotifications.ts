@@ -91,6 +91,34 @@ export async function requestPushPermission(): Promise<NotificationPermission> {
 // Abonelik Yönetimi
 // ──────────────────────────────────────────────────
 
+function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(errorMessage)), ms);
+    promise.then(
+      (val) => {
+        clearTimeout(timer);
+        resolve(val);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
+async function getActiveServiceWorkerRegistration(timeoutMs = 8000): Promise<ServiceWorkerRegistration> {
+  const existing = await navigator.serviceWorker.getRegistration();
+  if (existing?.active) {
+    return existing;
+  }
+  return withTimeout(
+    navigator.serviceWorker.ready,
+    timeoutMs,
+    'Bildirim servisi (Service Worker) henüz hazır değil. Lütfen sayfayı yenileyip tekrar deneyin.'
+  );
+}
+
 /**
  * Push bildirimlerine abone ol ve aboneliği Supabase'e kaydet.
  * @returns PushSubscription veya null (izin verilmediyse)
@@ -110,16 +138,20 @@ export async function subscribeToPush(userId: string): Promise<PushSubscription 
     throw new Error('VAPID public key yapılandırılmamış. .env dosyasını kontrol edin.');
   }
 
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await getActiveServiceWorkerRegistration(8000);
 
   // Mevcut abonelik varsa kullan
   let subscription = await registration.pushManager.getSubscription();
 
   if (!subscription) {
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
-    });
+    subscription = await withTimeout(
+      registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
+      }),
+      12000,
+      'Tarayıcı bildirim servisine bağlanılamadı. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.'
+    );
   }
 
   // Aboneliği Supabase'e kaydet
@@ -130,15 +162,21 @@ export async function subscribeToPush(userId: string): Promise<PushSubscription 
     throw new Error('Push abonelik anahtarları alınamadı.');
   }
 
-  const { error } = await supabase.from('push_subscriptions').upsert(
-    {
-      user_id: userId,
-      endpoint: subscription.endpoint,
-      p256dh: keys.p256dh,
-      auth: keys.auth,
-      user_agent: navigator.userAgent,
-    },
-    { onConflict: 'user_id,endpoint' }
+  const { error } = await withTimeout(
+    Promise.resolve(
+      supabase.from('push_subscriptions').upsert(
+        {
+          user_id: userId,
+          endpoint: subscription.endpoint,
+          p256dh: keys.p256dh,
+          auth: keys.auth,
+          user_agent: navigator.userAgent,
+        },
+        { onConflict: 'user_id,endpoint' }
+      )
+    ),
+    10000,
+    'Bildirim aboneliği sunucuya kaydedilirken zaman aşımı oluştu. Lütfen tekrar deneyin.'
   );
 
   if (error) {
@@ -155,7 +193,7 @@ export async function subscribeToPush(userId: string): Promise<PushSubscription 
 export async function unsubscribeFromPush(userId: string): Promise<void> {
   if (!isPushSupported()) return;
 
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await getActiveServiceWorkerRegistration(8000);
   const subscription = await registration.pushManager.getSubscription();
 
   if (subscription) {
@@ -178,7 +216,7 @@ export async function checkSubscriptionStatus(): Promise<boolean> {
   if (!isPushSupported()) return false;
 
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await getActiveServiceWorkerRegistration(4000);
     const subscription = await registration.pushManager.getSubscription();
     return subscription !== null;
   } catch {

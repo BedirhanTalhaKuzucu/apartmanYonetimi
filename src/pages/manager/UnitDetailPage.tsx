@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, UserPlus, Send, Link2, Phone, Copy, MessageCircle, CreditCard, Wallet, Download, FileText, Pencil, Trash2 } from 'lucide-react';
+import { Save, UserPlus, Send, Link2, Phone, Copy, MessageCircle, CreditCard, Wallet, Download, FileText, Pencil, Trash2, Clock, X } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -12,12 +12,12 @@ import { Tabs } from '@/components/ui/Tabs';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency, formatDate, formatShortDate, formatPhone, formatPeriod, isOverdue } from '@/lib/format';
-import { buildWhatsAppUrl, isDueEligibleForUnitDebts, generateIdempotencyKey } from '@/lib/utils';
+import { buildWhatsAppUrl, isDueEligibleForUnitDebts, generateIdempotencyKey, sortUnitResidents, formatUnitOptionLabel } from '@/lib/utils';
 import { generatePaymentReceipt, downloadPdf } from '@/lib/pdf';
 import { buildDebtReminderText, getSmartPortalUrl, type DebtItem } from '@/lib/debtReminder';
 import { useUnitDetail, useUpdateUnit } from '@/hooks/useUnits';
 import { useUnitResidents, useAddResident } from '@/hooks/useResidents';
-import { useCreateInvitation } from '@/hooks/useInvitations';
+import { useCreateInvitation, useUnitInvitations, useCancelInvitation } from '@/hooks/useInvitations';
 import { useUnitDues } from '@/hooks/useDues';
 import { useUnitPayments, useCreatePayment } from '@/hooks/usePayments';
 import { useAuthStore } from '@/store/authStore';
@@ -35,8 +35,10 @@ export default function UnitDetailPage() {
   const updateUnit = useUpdateUnit();
   const [showDeleteUnitModal, setShowDeleteUnitModal] = useState(false);
   const { data: residents } = useUnitResidents(id!);
+  const { data: unitInvitations } = useUnitInvitations(id);
   const addResident = useAddResident();
   const createInvitation = useCreateInvitation();
+  const cancelInvitation = useCancelInvitation();
   const { data: dues } = useUnitDues(id!);
   const { data: payments } = useUnitPayments(id!);
   const createPayment = useCreatePayment();
@@ -62,7 +64,8 @@ export default function UnitDetailPage() {
 
   const primaryResident = useMemo(() => {
     if (!residents || residents.length === 0) return null;
-    return residents.find((r: any) => r.is_active && r.phone) || residents[0];
+    const sorted = sortUnitResidents(residents);
+    return sorted[0];
   }, [residents]);
 
   const [editingResident, setEditingResident] = useState<any | null>(null);
@@ -71,6 +74,9 @@ export default function UnitDetailPage() {
     isOpen: boolean;
     title?: string;
     subtitle?: string;
+    description?: string;
+    actionLabel?: string;
+    actionType?: 'whatsapp' | 'select';
     residents: SelectResidentItem[];
     onSelect: (resident: SelectResidentItem) => void;
   }>({
@@ -237,10 +243,13 @@ export default function UnitDetailPage() {
     });
   };
 
-  const handleDownloadReceipt = (payment: any) => {
+  const executeDownloadReceipt = (payment: any, targetResident?: any) => {
     try {
       const receiptNo = payment.receipt_no || `MK-${payment.id.slice(0, 8).toUpperCase()}`;
-      const payerName = primaryResident?.full_name || (unit?.unit_number ? `Daire ${unit.unit_number} Sakini` : 'Bina Sakini');
+      const payerName =
+        targetResident?.full_name?.trim() ||
+        primaryResident?.full_name?.trim() ||
+        (unit?.unit_number ? `Daire ${unit.unit_number} Sakini` : 'Bina Sakini');
       const dueInfo = payment.dues
         ? `${payment.dues.description}${payment.dues.period ? ` (${formatPeriod(payment.dues.period)})` : ''}`
         : (payment.description || 'Aidat / Tahsilat');
@@ -266,9 +275,39 @@ export default function UnitDetailPage() {
     }
   };
 
-  const handleShareReceiptWhatsApp = (payment: any) => {
-    const targetPhone = primaryResident?.phone;
-    const payerName = primaryResident?.full_name || 'Sayın Sakinimiz';
+  const handleDownloadReceipt = (payment: any) => {
+    const activeList = sortUnitResidents(residents || [])
+      .filter((r: any) => r.is_active !== false)
+      .map((r: any) => ({
+        id: r.id,
+        full_name: r.full_name?.trim() || r.profiles?.full_name?.trim() || 'İsimsiz Sakin',
+        phone: r.phone?.trim() || r.profiles?.phone?.trim(),
+        role: r.role,
+        user_id: r.user_id,
+        is_active: r.is_active,
+      }));
+
+    if (activeList.length > 1) {
+      setResidentSelectModal({
+        isOpen: true,
+        title: 'Makbuz İçin Sakin Seçin',
+        subtitle: `${unit?.block ? `${unit.block} Blok ` : ''}Daire ${unit?.unit_number || ''} — ${formatCurrency(payment.amount)}`,
+        description:
+          'Bu dairede kayıtlı birden fazla sakin bulunmaktadır. Makbuzu hangi sakin adına oluşturmak istersiniz?',
+        actionLabel: 'Makbuz Oluştur',
+        actionType: 'select',
+        residents: activeList,
+        onSelect: (chosen) => executeDownloadReceipt(payment, chosen),
+      });
+      return;
+    }
+
+    executeDownloadReceipt(payment, activeList[0]);
+  };
+
+  const executeShareReceiptWhatsApp = (payment: any, targetResident?: any) => {
+    const targetPhone = targetResident?.phone || primaryResident?.phone;
+    const payerName = targetResident?.full_name || primaryResident?.full_name || 'Sayın Sakinimiz';
     const receiptNo = payment.receipt_no || `MK-${payment.id.slice(0, 8).toUpperCase()}`;
     const unitStr = `${unit?.block ? `${unit.block} Blok ` : ''}Daire ${unit?.unit_number || ''}`;
     const dueInfo = payment.dues
@@ -298,7 +337,7 @@ export default function UnitDetailPage() {
 
     // Otomatik makbuz PDF'ini de indir
     try {
-      handleDownloadReceipt(payment);
+      executeDownloadReceipt(payment, targetResident);
     } catch {
       // ignore
     }
@@ -310,6 +349,39 @@ export default function UnitDetailPage() {
       navigator.clipboard.writeText(msg);
       toast.success('Kayıtlı telefon bulunamadı; makbuz metni panoya kopyalandı ve PDF indirildi.');
     }
+  };
+
+  const handleShareReceiptWhatsApp = (payment: any) => {
+    const candidates = sortUnitResidents(residents || [])
+      .filter((r: any) => r.is_active !== false)
+      .map((r: any) => ({
+        id: r.id,
+        full_name: r.full_name?.trim() || r.profiles?.full_name?.trim() || 'İsimsiz Sakin',
+        phone: r.phone?.trim() || r.profiles?.phone?.trim(),
+        role: r.role,
+        user_id: r.user_id,
+        is_active: r.is_active,
+      }));
+
+    const phoneCandidates = candidates.filter((c) => c.phone);
+    const listToChoose = phoneCandidates.length > 1 ? phoneCandidates : candidates;
+
+    if (listToChoose.length > 1) {
+      setResidentSelectModal({
+        isOpen: true,
+        title: 'Makbuz Gönderilecek Sakini Seçin',
+        subtitle: `${unit?.block ? `${unit.block} Blok ` : ''}Daire ${unit?.unit_number || ''} — ${formatCurrency(payment.amount)}`,
+        description:
+          'Bu dairede kayıtlı birden fazla sakin bulunmaktadır. Makbuzu hangi sakin için oluşturup göndermek istersiniz?',
+        actionLabel: 'Seç & Gönder',
+        actionType: 'whatsapp',
+        residents: listToChoose,
+        onSelect: (chosen) => executeShareReceiptWhatsApp(payment, chosen),
+      });
+      return;
+    }
+
+    executeShareReceiptWhatsApp(payment, listToChoose[0]);
   };
 
   const [activeTab, setActiveTab] = useState('bilgi');
@@ -415,6 +487,7 @@ export default function UnitDetailPage() {
   };
 
   const handleAddResident = async () => {
+    if (addResident.isPending) return;
     if (!residentForm.full_name.trim()) {
       toast.error('İsim zorunludur');
       return;
@@ -434,6 +507,7 @@ export default function UnitDetailPage() {
   };
 
   const handleCreateInvite = async (resident: any) => {
+    if (createInvitation.isPending) return;
     try {
       const invitation = await createInvitation.mutateAsync({
         apartment_id: currentApartment!.id,
@@ -452,6 +526,7 @@ export default function UnitDetailPage() {
   };
 
   const handleDirectInvite = async () => {
+    if (createInvitation.isPending) return;
     try {
       const invitation = await createInvitation.mutateAsync({
         apartment_id: currentApartment!.id,
@@ -526,9 +601,14 @@ Aramıza hoş geldiniz! 🏡✨`
   if (isLoading) return <LoadingSpinner />;
   if (!unit) return <div className="p-4 text-center text-gray-500">Daire bulunamadı</div>;
 
+  const pendingInvitations = unitInvitations || [];
+
   const tabs = [
     { id: 'bilgi', label: 'Bilgi' },
-    { id: 'sakinler', label: `Sakinler (${residents?.length ?? 0})` },
+    {
+      id: 'sakinler',
+      label: `Sakinler (${residents?.length ?? 0}${pendingInvitations.length > 0 ? ` + ${pendingInvitations.length} Davet` : ''})`,
+    },
     { id: 'borclar', label: `Borçlar (${openEligibleDues.length})` },
     { id: 'odemeler', label: `Ödemeler (${payments?.length ?? 0})` },
   ];
@@ -538,7 +618,7 @@ Aramıza hoş geldiniz! 🏡✨`
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">
-            {unit.block ? `${unit.block} Blok ` : ''}Daire {unit.unit_number}
+            {formatUnitOptionLabel({ ...unit, unit_residents: residents || (unit as any).unit_residents })}
           </h1>
           <p className="text-sm text-gray-500">
             {unit.floor && `${unit.floor}. Kat`}
@@ -615,9 +695,10 @@ Aramıza hoş geldiniz! 🏡✨`
           </div>
 
           {residents && residents.length > 0 ? (
-            residents.map((resident: any) => {
+            sortUnitResidents(residents).map((resident: any, idx: number) => {
               const resName = resident.full_name?.trim() || resident.profiles?.full_name?.trim() || 'İsimsiz Sakin';
               const resPhone = resident.phone?.trim() || resident.profiles?.phone?.trim();
+              const isPrimary = idx === 0 && resident.is_active !== false;
 
               return (
                 <Card
@@ -634,6 +715,11 @@ Aramıza hoş geldiniz! 🏡✨`
                         <Badge variant={resident.role === 'owner' ? 'info' : 'neutral'} className="text-[11px] px-2 py-0.5">
                           {resident.role === 'owner' ? 'Ev Sahibi' : 'Kiracı'}
                         </Badge>
+                        {isPrimary && (
+                          <Badge variant="success" className="text-[10px] px-1.5 py-0.5">
+                            Ana Sakin
+                          </Badge>
+                        )}
                         {!resident.is_active && (
                           <Badge variant="neutral" className="text-[11px] px-2 py-0.5">
                             Pasif
@@ -726,12 +812,102 @@ Aramıza hoş geldiniz! 🏡✨`
                 </Card>
               );
             })
-          ) : (
+          ) : !pendingInvitations.length ? (
             <EmptyState
               icon={<UserPlus className="w-10 h-10" />}
               title="Sakin kaydı yok"
-              description="Bu daireye sakin ekleyin."
+              description="Bu daireye sakin ekleyin veya davet bağlantısı oluşturun."
             />
+          ) : null}
+
+          {/* Bekleyen Davetler (Kayıt Bekleniyor) */}
+          {pendingInvitations.length > 0 && (
+            <div className="space-y-2 pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Bekleyen Davetler ({pendingInvitations.length})</span>
+                </h3>
+                <span className="text-[11px] text-gray-500 hidden sm:inline">
+                  Kayıt olduklarında otomatik sakin listesine eklenecektir
+                </span>
+              </div>
+              <div className="space-y-2">
+                {pendingInvitations.map((inv) => (
+                  <Card key={inv.id} className="p-3.5 bg-amber-50/40 border border-amber-200/80 rounded-xl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-gray-900 text-sm">
+                            {inv.invited_name || 'İsimsiz Davet'}
+                          </span>
+                          <Badge variant="warning" className="text-[10px] px-1.5 py-0.5">
+                            Kayıt Bekleniyor
+                          </Badge>
+                          <Badge variant={inv.resident_role === 'owner' ? 'info' : 'neutral'} className="text-[10px] px-1.5 py-0.5">
+                            {inv.resident_role === 'owner' ? 'Ev Sahibi' : 'Kiracı'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                          {inv.invited_phone ? (
+                            <span className="font-mono">{formatPhone(inv.invited_phone)}</span>
+                          ) : (
+                            <span className="text-gray-400 italic">Telefon belirtilmemiş</span>
+                          )}
+                          <span className="text-gray-300">•</span>
+                          <span className="text-gray-500 text-[11px]">
+                            {formatShortDate(inv.created_at)} tarihinde oluşturuldu
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7.5 px-2.5 text-xs text-gray-700 bg-white"
+                          onClick={() => {
+                            const url = `${window.location.origin}/davet/${inv.token}`;
+                            navigator.clipboard.writeText(url);
+                            toast.success('Davet linki kopyalandı');
+                          }}
+                          title="Davet linkini kopyala"
+                        >
+                          <Copy className="w-3 h-3 mr-1" /> Kopyala
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7.5 px-2.5 text-xs text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
+                          onClick={() => {
+                            const url = `${window.location.origin}/davet/${inv.token}`;
+                            const aptName = currentApartment?.name || 'Apartman';
+                            const msg = `🏢 *${aptName}* davet bağlantınız:\n${url}`;
+                            window.open(buildWhatsAppUrl(inv.invited_phone || '', msg), '_blank');
+                          }}
+                          title="WhatsApp ile tekrar gönder"
+                        >
+                          <MessageCircle className="w-3 h-3 mr-1" /> WhatsApp
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7.5 px-2 text-xs text-rose-600 border-rose-200 hover:bg-rose-50"
+                          onClick={async () => {
+                            if (window.confirm('Bu davet bağlantısını iptal etmek istediğinize emin misiniz?')) {
+                              await cancelInvitation.mutateAsync(inv.id);
+                            }
+                          }}
+                          loading={cancelInvitation.isPending}
+                          title="Daveti İptal Et"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -1014,9 +1190,12 @@ Aramıza hoş geldiniz! 🏡✨`
       {/* Direct Invite Modal */}
       <Modal isOpen={showDirectInvite} onClose={() => setShowDirectInvite(false)} title="Davet Linki Oluştur">
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">
-            Sakin bilgilerini girmeniz zorunlu değildir. Boş bırakırsanız, sakin kayıt olurken kendi bilgilerini girecektir.
-          </p>
+          <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs text-blue-900 space-y-1">
+            <p className="font-semibold">ℹ️ Davet Bağlantısı Nasıl Çalışır?</p>
+            <p>
+              Davet bağlantısı oluşturmak sakini hemen eklemez. Sakin bu bağlantıyla kaydolup daireye katıldığında, <strong>otomatik olarak</strong> daire sakini olarak eklenecektir.
+            </p>
+          </div>
           <Input
             label="Ad Soyad (İsteğe Bağlı)"
             value={inviteForm.invited_name}
@@ -1039,7 +1218,7 @@ Aramıza hoş geldiniz! 🏡✨`
           />
           <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 [&>*]:w-full sm:[&>*]:w-auto">
             <Button variant="outline" onClick={() => setShowDirectInvite(false)}>İptal</Button>
-            <Button onClick={handleDirectInvite} loading={createInvitation.isPending}>
+            <Button onClick={handleDirectInvite} loading={createInvitation.isPending} disabled={createInvitation.isPending}>
               <Send className="w-4 h-4 mr-1" /> Davet Oluştur
             </Button>
           </div>
@@ -1188,12 +1367,15 @@ Aramıza hoş geldiniz! 🏡✨`
         unitInfo={`${unit?.block ? `${unit.block} Blok ` : ''}Daire ${unit?.unit_number || ''}`}
       />
 
-      {/* Hatırlatma Sakin Seçim Modalı */}
+      {/* Hatırlatma / Makbuz Sakin Seçim Modalı */}
       <SelectResidentModal
         isOpen={residentSelectModal.isOpen}
         onClose={() => setResidentSelectModal((prev) => ({ ...prev, isOpen: false }))}
         title={residentSelectModal.title}
         subtitle={residentSelectModal.subtitle}
+        description={residentSelectModal.description}
+        actionLabel={residentSelectModal.actionLabel}
+        actionType={residentSelectModal.actionType}
         residents={residentSelectModal.residents}
         onSelect={residentSelectModal.onSelect}
       />

@@ -11,6 +11,8 @@ import { usePayments } from '@/hooks/usePayments';
 import { useUnits } from '@/hooks/useUnits';
 import { generatePaymentReceipt, generateUnitStatement, generateFinancialReport, generateAnnouncementPdf, downloadPdf, sharePdf } from '@/lib/pdf';
 import { useAnnouncements } from '@/hooks/useAnnouncements';
+import { sortUnitResidents, formatUnitOptionLabel } from '@/lib/utils';
+import SelectResidentModal, { type SelectResidentItem } from '@/components/shared/SelectResidentModal';
 import toast from 'react-hot-toast';
 import type { PaymentReceiptData, UnitStatementData, FinancialReportData, AnnouncementPdfData } from '@/lib/pdf';
 
@@ -36,6 +38,19 @@ export default function DocumentsPage() {
   const [reportYear, setReportYear] = useState(currentYear);
   const [announcementId, setAnnouncementId] = useState('');
   const [generating, setGenerating] = useState('');
+  const [residentSelectModal, setResidentSelectModal] = useState<{
+    isOpen: boolean;
+    title?: string;
+    subtitle?: string;
+    description?: string;
+    actionLabel?: string;
+    residents: SelectResidentItem[];
+    onSelect: (resident: SelectResidentItem) => void;
+  }>({
+    isOpen: false,
+    residents: [],
+    onSelect: () => {},
+  });
 
   useEffect(() => {
     const type = searchParams.get('type');
@@ -53,19 +68,17 @@ export default function DocumentsPage() {
 
   const activePayments = payments?.filter((p: any) => p.status === 'active') ?? [];
 
-  const handleGenerateReceipt = async () => {
-    if (!receiptPaymentId) {
-      toast.error('Bir ödeme seçin');
-      return;
-    }
-    const payment = activePayments.find((p: any) => p.id === receiptPaymentId);
-    if (!payment) return;
+  const executeGenerateReceipt = async (payment: any, targetResident?: SelectResidentItem) => {
     setGenerating('receipt');
     try {
+      const payerName =
+        targetResident?.full_name?.trim() ||
+        payment.description ||
+        `Daire ${payment.units?.unit_number ?? ''} Sakini`;
       const blob = generatePaymentReceipt({
         apartmentName: currentApartment!.name,
         unitNumber: payment.units?.unit_number ?? '',
-        payerName: payment.description ?? '',
+        payerName,
         paymentDate: payment.payment_date,
         paymentMethod: payment.payment_method ?? 'other',
         relatedPeriod: payment.dues?.period ?? '',
@@ -81,18 +94,50 @@ export default function DocumentsPage() {
     setGenerating('');
   };
 
-  const handleGenerateStatement = async () => {
-    if (!statementUnitId) {
-      toast.error('Bir daire seçin');
+  const handleGenerateReceipt = async () => {
+    if (!receiptPaymentId) {
+      toast.error('Bir ödeme seçin');
       return;
     }
+    const payment = activePayments.find((p: any) => p.id === receiptPaymentId);
+    if (!payment) return;
+
+    const unit = units?.find((u: any) => u.id === payment.unit_id);
+    const activeResidents = sortUnitResidents(unit?.unit_residents || [])
+      .filter((r: any) => r.is_active !== false)
+      .map((r: any) => ({
+        id: r.id,
+        full_name: r.full_name?.trim() || (r as any).profiles?.full_name?.trim() || 'İsimsiz Sakin',
+        phone: r.phone?.trim() || (r as any).profiles?.phone?.trim(),
+        role: r.role,
+        user_id: r.user_id,
+        is_active: r.is_active,
+      }));
+
+    if (activeResidents.length > 1) {
+      setResidentSelectModal({
+        isOpen: true,
+        title: 'Makbuz İçin Sakin Seçin',
+        subtitle: `Daire ${payment.units?.unit_number ?? unit?.unit_number ?? ''}`,
+        description:
+          'Bu dairede kayıtlı birden fazla sakin bulunmaktadır. Makbuzu hangi sakin adına oluşturmak istersiniz?',
+        actionLabel: 'Makbuz Oluştur',
+        residents: activeResidents,
+        onSelect: (chosen) => executeGenerateReceipt(payment, chosen),
+      });
+      return;
+    }
+
+    await executeGenerateReceipt(payment, activeResidents[0]);
+  };
+
+  const executeGenerateStatement = async (unit: any, targetResident?: SelectResidentItem) => {
     setGenerating('statement');
     try {
-      const unit = units?.find((u: any) => u.id === statementUnitId);
       const blob = generateUnitStatement({
         apartmentName: currentApartment!.name,
         unitNumber: unit?.unit_number ?? '',
-        residentName: '',
+        residentName: targetResident?.full_name?.trim() || '',
         dateFrom: statementStartDate || new Date().toISOString(),
         dateTo: statementEndDate || new Date().toISOString(),
         entries: [],
@@ -103,6 +148,40 @@ export default function DocumentsPage() {
       toast.error('PDF oluşturulamadı');
     }
     setGenerating('');
+  };
+
+  const handleGenerateStatement = async () => {
+    if (!statementUnitId) {
+      toast.error('Bir daire seçin');
+      return;
+    }
+    const unit = units?.find((u: any) => u.id === statementUnitId);
+    const activeResidents = sortUnitResidents(unit?.unit_residents || [])
+      .filter((r: any) => r.is_active !== false)
+      .map((r: any) => ({
+        id: r.id,
+        full_name: r.full_name?.trim() || (r as any).profiles?.full_name?.trim() || 'İsimsiz Sakin',
+        phone: r.phone?.trim() || (r as any).profiles?.phone?.trim(),
+        role: r.role,
+        user_id: r.user_id,
+        is_active: r.is_active,
+      }));
+
+    if (activeResidents.length > 1) {
+      setResidentSelectModal({
+        isOpen: true,
+        title: 'Hesap Dökümü İçin Sakin Seçin',
+        subtitle: `${unit?.block ? `${unit.block} Blok ` : ''}Daire ${unit?.unit_number ?? ''}`,
+        description:
+          'Bu dairede kayıtlı birden fazla sakin bulunmaktadır. Hesap dökümünü hangi sakin adına oluşturmak istersiniz?',
+        actionLabel: 'Döküm Oluştur',
+        residents: activeResidents,
+        onSelect: (chosen) => executeGenerateStatement(unit, chosen),
+      });
+      return;
+    }
+
+    await executeGenerateStatement(unit, activeResidents[0]);
   };
 
   const handleGenerateReport = async () => {
@@ -166,10 +245,13 @@ export default function DocumentsPage() {
           onChange={(e) => setReceiptPaymentId(e.target.value)}
           options={[
             { value: '', label: 'Ödeme seçin...' },
-            ...activePayments.map((p: any) => ({
-              value: p.id,
-              label: `Daire ${p.unit?.unit_number} - ${p.amount} ₺ - ${p.receipt_no ? '#' + p.receipt_no : p.payment_date}`,
-            })),
+            ...activePayments.map((p: any) => {
+              const unitObj = p.units || p.unit || units?.find((u: any) => u.id === p.unit_id);
+              return {
+                value: p.id,
+                label: `${formatUnitOptionLabel(unitObj)} - ${p.amount} ₺ - ${p.receipt_no ? '#' + p.receipt_no : p.payment_date}`,
+              };
+            }),
           ]}
         />
         <Button
@@ -196,7 +278,7 @@ export default function DocumentsPage() {
             { value: '', label: 'Daire seçin...' },
             ...(units?.map((u: any) => ({
               value: u.id,
-              label: `Daire ${u.unit_number}${u.block ? ` (${u.block} Blok)` : ''}`,
+              label: formatUnitOptionLabel(u),
             })) ?? []),
           ]}
         />
@@ -278,6 +360,18 @@ export default function DocumentsPage() {
           <Download className="w-4 h-4 mr-1" /> PDF Oluştur
         </Button>
       </Card>
+
+      <SelectResidentModal
+        isOpen={residentSelectModal.isOpen}
+        onClose={() => setResidentSelectModal((prev) => ({ ...prev, isOpen: false }))}
+        title={residentSelectModal.title}
+        subtitle={residentSelectModal.subtitle}
+        description={residentSelectModal.description}
+        actionLabel={residentSelectModal.actionLabel}
+        actionType="select"
+        residents={residentSelectModal.residents}
+        onSelect={residentSelectModal.onSelect}
+      />
     </div>
   );
 }

@@ -1,23 +1,25 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Plus, MapPin, ChevronRight } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { Building2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
+import ApartmentMembershipCard from '@/components/shared/ApartmentMembershipCard';
 import { useApartments, useCreateApartment } from '@/hooks/useApartments';
 import { useAuthStore } from '@/store/authStore';
 import toast from 'react-hot-toast';
 
 export default function ApartmentListPage() {
   const navigate = useNavigate();
-  const { setCurrentApartment } = useAuthStore();
+  const { currentApartment, userRole, apartmentMemberships, switchApartment } = useAuthStore();
   const { data: apartments, isLoading } = useApartments();
   const createApartment = useCreateApartment();
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', address: '', description: '' });
+
+  const residentMemberships = apartmentMemberships.filter((m) => m.role === 'resident');
 
   const handleCreate = async () => {
     if (!form.name.trim()) {
@@ -29,20 +31,29 @@ export default function ApartmentListPage() {
       toast.success('Apartman oluşturuldu');
       setShowCreate(false);
       setForm({ name: '', address: '', description: '' });
+      navigate('/yonetici');
     } catch (err: any) {
       toast.error(err.message || 'Bir hata oluştu');
     }
   };
 
-  const handleSelect = (apartment: any) => {
-    setCurrentApartment(apartment);
+  const handleSelectManaged = (apartment: any) => {
+    switchApartment(apartment, 'manager');
     navigate('/yonetici');
+  };
+
+  const handleSelectResident = (apartment: any) => {
+    switchApartment(apartment, 'resident');
+    navigate('/sakin');
   };
 
   if (isLoading) return <LoadingSpinner />;
 
+  const hasManaged = apartments && apartments.length > 0;
+  const hasResident = residentMemberships.length > 0;
+
   return (
-    <div className="p-4 space-y-4 pb-24">
+    <div className="p-4 space-y-6 pb-24">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Apartmanlarım</h1>
         <Button size="sm" onClick={() => setShowCreate(true)}>
@@ -50,35 +61,48 @@ export default function ApartmentListPage() {
         </Button>
       </div>
 
-      {apartments && apartments.length > 0 ? (
-        <div className="space-y-3">
-          {apartments.map((apt: any) => (
-            <Card
-              key={apt.id}
-              className="p-4 cursor-pointer hover:border-primary-300 transition-colors active:bg-gray-50"
-              onClick={() => handleSelect(apt)}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-primary-50 rounded-lg">
-                    <Building2 className="w-6 h-6 text-primary-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{apt.name}</h3>
-                    {apt.address && (
-                      <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
-                        <MapPin className="w-3 h-3" /> {apt.address}
-                      </p>
-                    )}
-                    <p className="text-xs text-gray-400 mt-1">
-                      {apt.unit_count ?? 0} daire
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-gray-400" />
+      {hasManaged || hasResident ? (
+        <div className="space-y-6">
+          {hasManaged && (
+            <div className="space-y-2.5">
+              {hasResident && (
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 px-1">
+                  Yönettiğim Apartmanlar
+                </h2>
+              )}
+              <div className="space-y-3">
+                {apartments.map((apt: any) => (
+                  <ApartmentMembershipCard
+                    key={`mgr-${apt.id}`}
+                    apartment={apt}
+                    role="manager"
+                    isActive={currentApartment?.id === apt.id && userRole === 'manager'}
+                    onSelect={() => handleSelectManaged(apt)}
+                  />
+                ))}
               </div>
-            </Card>
-          ))}
+            </div>
+          )}
+
+          {hasResident && (
+            <div className="space-y-2.5">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 px-1">
+                Sakin Olduğum Apartmanlar
+              </h2>
+              <div className="space-y-3">
+                {residentMemberships.map((m) => (
+                  <ApartmentMembershipCard
+                    key={`res-${m.apartment.id}`}
+                    apartment={m.apartment}
+                    role="resident"
+                    units={m.units}
+                    isActive={currentApartment?.id === m.apartment.id && userRole === 'resident'}
+                    onSelect={() => handleSelectResident(m.apartment)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <EmptyState

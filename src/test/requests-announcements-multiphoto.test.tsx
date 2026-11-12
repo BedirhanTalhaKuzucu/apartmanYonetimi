@@ -8,8 +8,15 @@ import { parseAttachmentUrls } from '@/lib/utils';
 import FileUpload, { MAX_TOTAL_FILE_SIZE } from '@/components/shared/FileUpload';
 import NewRequestPage from '@/pages/resident/NewRequestPage';
 import ResidentAnnouncementsPage from '@/pages/resident/ResidentAnnouncementsPage';
+import RequestsPage from '@/pages/manager/RequestsPage';
+import ResidentRequestsPage from '@/pages/resident/ResidentRequestsPage';
+import ResidentDashboard from '@/pages/resident/ResidentDashboard';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
+import * as requestHooks from '@/hooks/useRequests';
+import * as duesHooks from '@/hooks/useDues';
+import * as paymentHooks from '@/hooks/usePayments';
+import * as resContextHooks from '@/hooks/useResidentContext';
 
 // Mock react-hot-toast
 vi.mock('react-hot-toast', () => ({
@@ -350,6 +357,181 @@ describe('Multi-photo & Request Handling Suite', () => {
       // Expect "+2" badge because 3 thumbnails shown and 4 total photos
       expect(screen.getByText('+2')).toBeInTheDocument();
       expect(screen.getByText('4')).toBeInTheDocument();
+    });
+  });
+
+  describe('5. Requests Display, Comments & ResidentDashboard Recent Requests', () => {
+    it('RequestsPage displays full unit label, requester name, and commenter names with (Yönetici)', async () => {
+      useAuthStore.setState({
+        user: { id: 'mgr-1' } as any,
+        profile: { id: 'mgr-1', full_name: 'Ayşe Yönetici' } as any,
+        currentApartment: { id: 'apt-1', name: 'Palmiye Apartmanı', created_by: 'mgr-1' } as any,
+        userRole: 'manager',
+        initialized: true,
+        loading: false,
+      });
+
+      vi.spyOn(requestHooks, 'useRequests').mockReturnValue({
+        data: [
+          {
+            id: 'req-1',
+            apartment_id: 'apt-1',
+            unit_id: 'u-4',
+            title: 'Asansör Kapısı',
+            description: 'Kapı tam kapanmıyor.',
+            category: 'Asansör',
+            status: 'new',
+            created_at: '2026-11-10T10:00:00Z',
+            units: { unit_number: '4', block: 'A' },
+            profiles: { full_name: 'Mehmet Demir' },
+          },
+        ],
+        isLoading: false,
+      } as any);
+
+      vi.spyOn(requestHooks, 'useRequestComments').mockReturnValue({
+        data: [
+          {
+            id: 'c-1',
+            request_id: 'req-1',
+            user_id: 'mgr-1',
+            content: 'Servis yönlendirildi.',
+            created_at: '2026-11-10T11:00:00Z',
+            profiles: { full_name: 'Ayşe Yönetici' },
+            is_manager: true,
+          },
+          {
+            id: 'c-2',
+            request_id: 'req-1',
+            user_id: 'res-1',
+            content: 'Teşekkürler.',
+            created_at: '2026-11-10T11:30:00Z',
+            profiles: { full_name: 'Mehmet Demir' },
+            is_manager: false,
+          },
+        ],
+        isLoading: false,
+      } as any);
+
+      const queryClient = createTestQueryClient();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <RequestsPage />
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      expect(screen.getByText(/Mehmet Demir \(A Blok Daire 4\)/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('Asansör Kapısı'));
+
+      expect(screen.getByText('Mehmet Demir (A Blok Daire 4)')).toBeInTheDocument();
+      expect(screen.getByText('Ayşe Yönetici')).toBeInTheDocument();
+      expect(screen.getByText('(Yönetici)')).toBeInTheDocument();
+      expect(screen.getByText('Mehmet Demir')).toBeInTheDocument();
+    });
+
+    it('ResidentRequestsPage displays commenter full names and (Yönetici) label', () => {
+      useAuthStore.setState({
+        user: { id: 'res-1' } as any,
+        profile: { id: 'res-1', full_name: 'Mehmet Demir' } as any,
+        currentApartment: { id: 'apt-1', name: 'Palmiye Apartmanı', created_by: 'mgr-1' } as any,
+        userRole: 'resident',
+        initialized: true,
+        loading: false,
+      });
+
+      vi.spyOn(requestHooks, 'useMyRequests').mockReturnValue({
+        data: [
+          {
+            id: 'req-1',
+            apartment_id: 'apt-1',
+            title: 'Asansör Kapısı',
+            description: 'Kapı tam kapanmıyor.',
+            category: 'Asansör',
+            status: 'in_progress',
+            created_at: '2026-11-10T10:00:00Z',
+            updated_at: '2026-11-10T11:00:00Z',
+          },
+        ],
+        isLoading: false,
+      } as any);
+
+      vi.spyOn(requestHooks, 'useRequestComments').mockReturnValue({
+        data: [
+          {
+            id: 'c-1',
+            request_id: 'req-1',
+            user_id: 'mgr-1',
+            content: 'Servis yarın gelecek.',
+            created_at: '2026-11-10T11:00:00Z',
+            profiles: { full_name: 'Ayşe Yönetici' },
+            is_manager: true,
+          },
+        ],
+        isLoading: false,
+      } as any);
+
+      const queryClient = createTestQueryClient();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/sakin/talepler?id=req-1']}>
+            <Routes>
+              <Route path="/sakin/talepler" element={<ResidentRequestsPage />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      expect(screen.getByText('Ayşe Yönetici')).toBeInTheDocument();
+      expect(screen.getByText('(Yönetici)')).toBeInTheDocument();
+    });
+
+    it('ResidentDashboard shows last 3 requests and navigates to /sakin/talepler via bottom button', () => {
+      useAuthStore.setState({
+        user: { id: 'res-1' } as any,
+        profile: { id: 'res-1', full_name: 'Mehmet Demir' } as any,
+        currentApartment: { id: 'apt-1', name: 'Palmiye Apartmanı' } as any,
+        userRole: 'resident',
+        initialized: true,
+        loading: false,
+      });
+
+      vi.spyOn(resContextHooks, 'useResidentUnitIds').mockReturnValue(['u-4']);
+      vi.spyOn(duesHooks, 'useMyDues').mockReturnValue({ data: [], isLoading: false } as any);
+      vi.spyOn(paymentHooks, 'useMyPaymentNotifications').mockReturnValue({ data: [], isLoading: false } as any);
+      (useAnnouncements as any).mockReturnValue({ data: [], isLoading: false });
+      vi.spyOn(requestHooks, 'useMyRequests').mockReturnValue({
+        data: [
+          { id: 'r-1', title: 'Talep 1', category: 'Tesisat', status: 'new', created_at: '2026-11-12T10:00:00Z' },
+          { id: 'r-2', title: 'Talep 2', category: 'Elektrik', status: 'resolved', created_at: '2026-11-11T10:00:00Z' },
+          { id: 'r-3', title: 'Talep 3', category: 'Asansör', status: 'in_progress', created_at: '2026-11-10T10:00:00Z' },
+          { id: 'r-4', title: 'Talep 4 (Eski)', category: 'Diğer', status: 'resolved', created_at: '2026-11-01T10:00:00Z' },
+        ],
+        isLoading: false,
+      } as any);
+
+      const queryClient = createTestQueryClient();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/sakin']}>
+            <Routes>
+              <Route path="/sakin" element={<ResidentDashboard />} />
+              <Route path="/sakin/talepler" element={<div>Taleplerim Sayfası</div>} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      expect(screen.getByText('Son Taleplerim')).toBeInTheDocument();
+      expect(screen.getByText('Talep 1')).toBeInTheDocument();
+      expect(screen.getByText('Talep 2')).toBeInTheDocument();
+      expect(screen.getByText('Talep 3')).toBeInTheDocument();
+      expect(screen.queryByText('Talep 4 (Eski)')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /Taleplerim Sayfasına Git/i }));
+      expect(screen.getByText('Taleplerim Sayfası')).toBeInTheDocument();
     });
   });
 });

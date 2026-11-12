@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
+import { notifyUnitResidents, notifyApartmentResidents } from '@/services/notificationService';
+import { formatCurrency, formatDate } from '@/lib/format';
 import type { Due } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -16,7 +18,7 @@ export function useDues(apartmentId: string | undefined, filters?: DueFilters) {
     queryFn: async () => {
       let query = supabase
         .from('dues')
-        .select('*, units(unit_number, block, floor), payments(id, amount, status, payment_date, payment_method)')
+        .select('*, units(unit_number, block, floor, unit_residents(id, user_id, full_name, is_active, created_at)), payments(id, amount, status, payment_date, payment_method)')
         .eq('apartment_id', apartmentId!)
         .order('due_date', { ascending: false });
 
@@ -154,6 +156,16 @@ export function useCreateBulkDues() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['dues', variables.apartment_id] });
       queryClient.invalidateQueries({ queryKey: ['overdue-dues'] });
+
+      // Sakinlere bildirim gönder
+      notifyApartmentResidents({
+        apartmentId: variables.apartment_id,
+        title: `${variables.period} Dönemi Aidatları Tanımlandı 📋`,
+        body: `${variables.description || `${variables.period} dönemi aidatları`} sisteminize yansıtıldı.`,
+        type: 'due_reminder',
+        referenceType: 'due',
+      }).catch(() => {});
+
       toast.success(`${data.length} daire için aidat oluşturuldu.`);
     },
     onError: (error: Error) => {
@@ -271,6 +283,16 @@ export function useCreateMultiPeriodBulkDues() {
       queryClient.invalidateQueries({ queryKey: ['overdue-dues'] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+
+      // Sakinlere bildirim gönder
+      notifyApartmentResidents({
+        apartmentId: variables.apartment_id,
+        title: 'Yeni Dönem Aidatları Tanımlandı 📋',
+        body: `${data.periodsCount} aylık aidat kayıtları oluşturuldu ve dairenize yansıtıldı.`,
+        type: 'due_reminder',
+        referenceType: 'due',
+      }).catch(() => {});
+
       toast.success(`${data.periodsCount} ay için toplam ${data.totalCreated} daire aidatı oluşturuldu.`);
     },
     onError: (error: Error) => {
@@ -415,6 +437,16 @@ export function useGenerateMonthlyDues() {
       queryClient.invalidateQueries({ queryKey: ['apartment', variables.apartment_id] });
       queryClient.invalidateQueries({ queryKey: ['apartments'] });
       queryClient.invalidateQueries({ queryKey: ['overdue-dues'] });
+
+      // Sakinlere bildirim gönder
+      notifyApartmentResidents({
+        apartmentId: variables.apartment_id,
+        title: `${res.period} Ayı Aidatları Tanımlandı 📋`,
+        body: `${variables.description?.trim() || `${res.period} ayı aidatı`} hesabınıza yansıtıldı.`,
+        type: 'due_reminder',
+        referenceType: 'due',
+      }).catch(() => {});
+
       toast.success(`${res.created_count} daire için ${res.period} ayı aidatları oluşturuldu.`);
     },
     onError: (error: Error) => {
@@ -459,6 +491,18 @@ export function useCreateSingleDue() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['dues', data.apartment_id] });
       queryClient.invalidateQueries({ queryKey: ['unit', data.unit_id] });
+
+      // Daire sakinlerine bildirim gönder
+      notifyUnitResidents({
+        unitId: data.unit_id,
+        apartmentId: data.apartment_id,
+        title: 'Yeni Borç/Aidat Tanımlandı 📋',
+        body: `${data.description} (${formatCurrency(data.amount)}) hesabınıza yansıtıldı.${data.due_date ? ` Son ödeme: ${formatDate(data.due_date)}` : ''}`,
+        type: 'due_reminder',
+        referenceType: 'due',
+        referenceId: data.id,
+      }).catch(() => {});
+
       toast.success('Borç kaydı oluşturuldu.');
     },
     onError: (error: Error) => {

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
-import { isDueEligibleForUnitDebts } from '@/lib/utils';
+import { isDueEligibleForUnitDebts, sortUnitResidents } from '@/lib/utils';
 import { formatPeriod } from '@/lib/format';
 
 export function useDashboardStats() {
@@ -96,7 +96,7 @@ export function useRecentPayments() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('payments')
-        .select('*, units(unit_number, block)')
+        .select('*, units(unit_number, block, unit_residents(id, user_id, full_name, is_active, created_at))')
         .eq('apartment_id', aptId!)
         .eq('status', 'active')
         .order('created_at', { ascending: false })
@@ -118,7 +118,7 @@ export function useRecentRequests() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('maintenance_requests')
-        .select('*, units(unit_number)')
+        .select('*, units(unit_number, block, unit_residents(id, user_id, full_name, is_active, created_at))')
         .eq('apartment_id', aptId!)
         .order('created_at', { ascending: false })
         .limit(5);
@@ -226,7 +226,7 @@ export function useDebtorUnits() {
         const isLate = Boolean(due.due_date && due.due_date < today);
 
         if (!debtMap[unit.id]) {
-          const activeResidents = (unit.unit_residents ?? []).filter((r: any) => r.is_active);
+          const activeResidents = sortUnitResidents(unit.unit_residents ?? []).filter((r: any) => r.is_active);
           const activeWithPhone = activeResidents
             .map((r: any) => ({
               id: r.id,

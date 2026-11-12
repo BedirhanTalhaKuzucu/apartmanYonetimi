@@ -20,6 +20,21 @@ export function useAuth() {
       .single();
 
     if (profile) {
+      // Google ile kayıt olan kullanıcıların full_name alanı boşsa user_metadata'dan tamamla
+      if (!profile.full_name?.trim()) {
+        const currentUser = store.user;
+        const metaName =
+          currentUser?.user_metadata?.full_name?.trim() ||
+          currentUser?.user_metadata?.name?.trim();
+        if (metaName) {
+          profile.full_name = metaName;
+          supabase
+            .from('profiles')
+            .update({ full_name: metaName })
+            .eq('id', userId)
+            .then(() => {});
+        }
+      }
       store.setProfile(profile);
     }
 

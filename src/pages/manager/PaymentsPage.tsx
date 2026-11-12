@@ -11,7 +11,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency, formatShortDate, formatPeriod } from '@/lib/format';
-import { isDueEligibleForUnitDebts } from '@/lib/utils';
+import { isDueEligibleForUnitDebts, formatUnitOptionLabel } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { usePayments, useCreatePayment, useCancelPayment } from '@/hooks/usePayments';
 import { usePaymentNotifications, useApproveNotification, useRejectNotification } from '@/hooks/usePaymentNotifications';
@@ -198,8 +198,10 @@ export default function PaymentsPage() {
               <Card key={p.id} className="p-3">
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Daire {p.unit?.unit_number}</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-gray-900">
+                        {formatUnitOptionLabel(p.units || p.unit || units?.find((u: any) => u.id === p.unit_id))}
+                      </span>
                       <Badge variant={p.status === 'active' ? 'success' : 'danger'}>
                         {p.status === 'active' ? 'Aktif' : 'İptal'}
                       </Badge>
@@ -243,8 +245,13 @@ export default function PaymentsPage() {
               <Card key={n.id} className="p-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Daire {n.unit?.unit_number}</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-gray-900">
+                        {formatUnitOptionLabel(
+                          n.units || n.unit || units?.find((u: any) => u.id === n.unit_id),
+                          n.profiles?.full_name
+                        )}
+                      </span>
                       <Badge
                         variant={
                           n.status === 'pending' ? 'warning' :
@@ -312,7 +319,7 @@ export default function PaymentsPage() {
               { value: '', label: 'Daire seçin...' },
               ...(units?.map((u: any) => ({
                 value: u.id,
-                label: `Daire ${u.unit_number}${u.block ? ` (${u.block} Blok)` : ''}`,
+                label: formatUnitOptionLabel(u),
               })) ?? []),
             ]}
           />

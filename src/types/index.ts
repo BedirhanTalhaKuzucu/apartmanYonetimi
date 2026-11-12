@@ -64,6 +64,17 @@ export interface ApartmentManager {
   created_at: string;
 }
 
+export interface ApartmentMembership {
+  apartment: Apartment;
+  role: UserRole;
+  units?: {
+    id: string;
+    unit_number: string;
+    block?: string | null;
+    floor?: string | null;
+  }[];
+}
+
 export interface Unit {
   id: string;
   apartment_id: string;

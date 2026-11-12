@@ -222,16 +222,16 @@ describe('UnitListPage & Navigation Enhancements', () => {
     renderWithProviders(<UnitListPage />);
 
     // Initially both units visible
-    expect(screen.getByText('Ahmet Kaya')).toBeInTheDocument();
-    expect(screen.getByText('Mehmet Öz')).toBeInTheDocument();
+    expect(screen.getByText(/Ahmet Kaya/)).toBeInTheDocument();
+    expect(screen.getByText(/Mehmet Öz/)).toBeInTheDocument();
 
     // Click "Borçlular (1)" tab
     const debtorsTab = screen.getByRole('button', { name: /Borçlular \(1\)/i });
     fireEvent.click(debtorsTab);
 
     // Only Unit 1 (Ahmet Kaya) should be visible
-    expect(screen.getByText('Ahmet Kaya')).toBeInTheDocument();
-    expect(screen.queryByText('Mehmet Öz')).not.toBeInTheDocument();
+    expect(screen.getByText(/Ahmet Kaya/)).toBeInTheDocument();
+    expect(screen.queryByText(/Mehmet Öz/)).not.toBeInTheDocument();
   });
 
   it('prefills unit select in PaymentsPage when navigated with action=create&unit=...', () => {

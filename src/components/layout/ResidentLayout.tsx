@@ -11,9 +11,11 @@ import {
   LogOut,
   Smartphone,
   Download,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePWAInstall, triggerPWAInstallModal } from '@/hooks/usePWAInstall';
+import { useUnreadCount } from '@/hooks/useNotifications';
 
 const navItems = [
   { to: '/sakin', label: 'Ana Sayfa', icon: Home, end: true },
@@ -24,9 +26,10 @@ const navItems = [
 ];
 
 export default function ResidentLayout() {
-  const { currentApartment, signOut } = useAuthStore();
+  const { user, currentApartment, apartmentMemberships, signOut } = useAuthStore();
   const navigate = useNavigate();
   const { isStandalone } = usePWAInstall();
+  const { data: unreadCount } = useUnreadCount(user?.id);
 
   const handleSignOut = async () => {
     await signOut();
@@ -38,12 +41,23 @@ export default function ResidentLayout() {
       {/* ── Top Header ── */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
         <div className="mx-auto max-w-2xl flex items-center justify-between px-4 h-14">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-primary-600" />
-            <span className="font-semibold text-gray-900 text-sm truncate max-w-[200px]">
+          <button
+            type="button"
+            onClick={() => navigate('/sakin/apartmanlar')}
+            className="flex items-center gap-2 px-2 py-1.5 -ml-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors cursor-pointer min-w-0"
+            title="Apartmanlarım / Apartman Değiştir"
+          >
+            <Building2 className="h-5 w-5 text-primary-600 shrink-0" />
+            <span className="font-semibold text-gray-900 text-sm truncate max-w-[170px] sm:max-w-[220px]">
               {currentApartment?.name || 'Apartman Yönetim'}
             </span>
-          </div>
+            <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+            {apartmentMemberships.length > 1 && (
+              <span className="hidden xs:inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold bg-primary-100 text-primary-700 rounded-full">
+                {apartmentMemberships.length}
+              </span>
+            )}
+          </button>
           <div className="flex items-center gap-1.5 sm:gap-2">
             {!isStandalone && (
               <button
@@ -60,8 +74,14 @@ export default function ResidentLayout() {
             <NavLink
               to="/sakin/bildirimler"
               className="relative p-2 rounded-lg hover:bg-gray-100"
+              title={unreadCount && unreadCount > 0 ? `${unreadCount} Okunmamış Bildirim` : 'Bildirimler'}
             >
               <Bell className="h-5 w-5 text-gray-600" />
+              {unreadCount && unreadCount > 0 ? (
+                <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow-xs">
+                  {unreadCount}
+                </span>
+              ) : null}
             </NavLink>
             <button
               onClick={handleSignOut}

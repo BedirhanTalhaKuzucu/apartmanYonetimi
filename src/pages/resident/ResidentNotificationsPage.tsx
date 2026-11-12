@@ -19,11 +19,13 @@ import { cn } from '@/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 
 const TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string; bgColor: string }> = {
-  due_reminder: { icon: AlertCircle, color: 'text-red-600', bgColor: 'bg-red-100' },
+  due_reminder: { icon: AlertCircle, color: 'text-amber-600', bgColor: 'bg-amber-100' },
+  due_created: { icon: AlertCircle, color: 'text-amber-600', bgColor: 'bg-amber-100' },
   announcement: { icon: Megaphone, color: 'text-blue-600', bgColor: 'bg-blue-100' },
-  request_update: { icon: Wrench, color: 'text-yellow-600', bgColor: 'bg-yellow-100' },
-  payment_approved: { icon: CheckCircle2, color: 'text-green-600', bgColor: 'bg-green-100' },
-  payment_rejected: { icon: CreditCard, color: 'text-red-600', bgColor: 'bg-red-100' },
+  request_update: { icon: Wrench, color: 'text-orange-600', bgColor: 'bg-orange-100' },
+  payment_received: { icon: CheckCircle2, color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
+  payment_approved: { icon: CheckCircle2, color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
+  payment_rejected: { icon: CreditCard, color: 'text-rose-600', bgColor: 'bg-rose-100' },
   payment_notification: { icon: CreditCard, color: 'text-blue-600', bgColor: 'bg-blue-100' },
 };
 

@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { InstallPWAPrompt } from '@/components/shared/InstallPWAPrompt';
+import { PushNotificationPrompt } from '@/components/shared/PushNotificationPrompt';
 
 /* ── Layouts ── */
 const AuthLayout = React.lazy(() => import('@/components/layout/AuthLayout'));
@@ -42,6 +43,7 @@ const ResidentAnnouncementsPage = React.lazy(() => import('@/pages/resident/Resi
 const ResidentRequestsPage = React.lazy(() => import('@/pages/resident/ResidentRequestsPage'));
 const NewRequestPage = React.lazy(() => import('@/pages/resident/NewRequestPage'));
 const ResidentNotificationsPage = React.lazy(() => import('@/pages/resident/ResidentNotificationsPage'));
+const ResidentApartmentsPage = React.lazy(() => import('@/pages/resident/ResidentApartmentsPage'));
 const ProfilePage = React.lazy(() => import('@/pages/resident/ProfilePage'));
 
 /* ──────────────────────────────────────── */
@@ -265,6 +267,7 @@ export default function App() {
           <Route path="/sakin/talepler/yeni" element={<NewRequestPage />} />
           <Route path="/sakin/yeni-talep" element={<NewRequestPage />} />
           <Route path="/sakin/bildirimler" element={<ResidentNotificationsPage />} />
+          <Route path="/sakin/apartmanlar" element={<ResidentApartmentsPage />} />
           <Route path="/sakin/profil" element={<ProfilePage />} />
         </Route>
 
@@ -272,6 +275,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <InstallPWAPrompt />
+      <PushNotificationPrompt />
     </Suspense>
   );
 }

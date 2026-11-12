@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
+import { formatCurrency } from '@/lib/format';
+import { notifyManagers, notifyUnitResidents, createNotificationForUser, getUnitAndResidentLabel } from '@/services/notificationService';
 import type { Payment, PaymentNotification } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -13,7 +15,7 @@ export function usePayments(
     queryFn: async () => {
       let query = supabase
         .from('payments')
-        .select('*, units(unit_number, block), dues(period, description)')
+        .select('*, units(unit_number, block, unit_residents(id, user_id, full_name, is_active, created_at)), dues(period, description)')
         .eq('apartment_id', apartmentId!)
         .order('payment_date', { ascending: false });
 
@@ -33,7 +35,7 @@ export function usePayments(
       const { data, error } = await query;
       if (error) throw error;
       return data as (Payment & {
-        units: { unit_number: string; block: string | null };
+        units: { unit_number: string; block: string | null; unit_residents?: any[] };
         dues: { period: string; description: string } | null;
       })[];
     },
@@ -201,6 +203,18 @@ export function useCreatePayment() {
       if (data.due_id) {
         queryClient.invalidateQueries({ queryKey: ['due', data.due_id] });
       }
+
+      // Sakinlere ödemenin alındığına dair bildirim gönder
+      notifyUnitResidents({
+        unitId: data.unit_id,
+        apartmentId: data.apartment_id,
+        title: 'Ödemeniz Kaydedildi 💳',
+        body: `${formatCurrency(data.amount)} tutarındaki ödemeniz başarıyla sisteme işlendi.${data.receipt_no ? ` Makbuz No: ${data.receipt_no}` : ''}`,
+        type: 'payment_received',
+        referenceType: 'payment',
+        referenceId: data.id,
+      }).catch(() => {});
+
       toast.success('Ödeme kaydedildi.');
     },
     onError: (error: Error) => {
@@ -286,7 +300,7 @@ export function usePaymentNotifications(apartmentId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('payment_notifications')
-        .select('*, units(unit_number, block), profiles:notified_by(full_name, phone)')
+        .select('*, units(unit_number, block, unit_residents(id, user_id, full_name, is_active, created_at)), profiles:notified_by(full_name, phone)')
         .eq('apartment_id', apartmentId!)
         .order('created_at', { ascending: false });
 
@@ -302,7 +316,7 @@ export function usePaymentNotifications(apartmentId: string | undefined) {
 
 export function useCreatePaymentNotification() {
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
 
   return useMutation({
     mutationFn: async (input: {
@@ -327,9 +341,23 @@ export function useCreatePaymentNotification() {
       if (error) throw error;
       return data as PaymentNotification;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ['payment-notifications'] });
       queryClient.invalidateQueries({ queryKey: ['my-payment-notifications'] });
+
+      // Yöneticilere bildirim gönder (daire ve sakin ad-soyad ile)
+      const senderLabel = await getUnitAndResidentLabel(data.unit_id, user?.id, profile?.full_name);
+      notifyManagers({
+        apartmentId: data.apartment_id,
+        title: '💳 Yeni Ödeme Bildirimi',
+        body: senderLabel
+          ? `${senderLabel}: ${formatCurrency(data.amount)} ödeme bildirimi gönderdi. Onay bekleniyor.`
+          : `${formatCurrency(data.amount)} tutarında yeni bir ödeme bildirimi iletildi. Onay bekleniyor.`,
+        type: 'payment_notification',
+        referenceType: 'payment_notification',
+        referenceId: data.id,
+      }).catch(() => {});
+
       toast.success('Ödeme bildiriminiz gönderildi. Yönetici onayı bekleniyor.');
     },
     onError: (error: Error) => {
@@ -417,12 +445,26 @@ export function useApprovePaymentNotification() {
 
       return payment;
     },
-    onSuccess: () => {
+    onSuccess: (payment, notification) => {
       queryClient.invalidateQueries({ queryKey: ['payment-notifications'] });
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['dues'] });
       queryClient.invalidateQueries({ queryKey: ['overdue-dues'] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+
+      // Sakine bildirim gönder
+      if (notification?.notified_by) {
+        createNotificationForUser({
+          userId: notification.notified_by,
+          apartmentId: notification.apartment_id,
+          title: 'Ödeme Bildiriminiz Onaylandı ✅',
+          body: `${formatCurrency(notification.amount)} tutarındaki ödeme bildiriminiz onaylandı ve hesaba işlendi.`,
+          type: 'payment_approved',
+          referenceType: 'payment',
+          referenceId: payment.id,
+        }).catch(() => {});
+      }
+
       toast.success('Ödeme bildirimi onaylandı ve ödeme kaydedildi.');
     },
     onError: (error: Error) => {
@@ -437,7 +479,7 @@ export function useRejectPaymentNotification() {
 
   return useMutation({
     mutationFn: async (input: { id: string; rejection_reason: string }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('payment_notifications')
         .update({
           status: 'rejected',
@@ -446,12 +488,29 @@ export function useRejectPaymentNotification() {
           rejection_reason: input.rejection_reason,
         })
         .eq('id', input.id)
-        .eq('status', 'pending');
+        .eq('status', 'pending')
+        .select()
+        .single();
 
       if (error) throw error;
+      return data as PaymentNotification;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['payment-notifications'] });
+
+      // Sakine red bildirimi gönder
+      if (data?.notified_by) {
+        createNotificationForUser({
+          userId: data.notified_by,
+          apartmentId: data.apartment_id,
+          title: 'Ödeme Bildiriminiz Reddedildi ❌',
+          body: `Ödeme bildiriminiz onaylanmadı. Neden: ${data.rejection_reason || 'Belirtilmedi'}`,
+          type: 'payment_rejected',
+          referenceType: 'payment_notification',
+          referenceId: data.id,
+        }).catch(() => {});
+      }
+
       toast.success('Ödeme bildirimi reddedildi.');
     },
     onError: (error: Error) => {
@@ -461,15 +520,21 @@ export function useRejectPaymentNotification() {
 }
 
 export function useMyPaymentNotifications(userId: string | undefined) {
+  const { currentApartment } = useAuthStore();
   return useQuery({
-    queryKey: ['my-payment-notifications', userId],
+    queryKey: ['my-payment-notifications', userId, currentApartment?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('payment_notifications')
         .select('*, dues(period, description)')
         .eq('notified_by', userId!)
         .order('created_at', { ascending: false });
 
+      if (currentApartment?.id) {
+        query = query.eq('apartment_id', currentApartment.id);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data as PaymentNotification[];
     },

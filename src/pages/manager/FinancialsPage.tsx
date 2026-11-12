@@ -47,7 +47,7 @@ import { Select } from '@/components/ui/Select';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency, formatShortDate, formatPeriod } from '@/lib/format';
-import { getPeriodsBetween, cn, isDueEligibleForUnitDebts, generateIdempotencyKey } from '@/lib/utils';
+import { getPeriodsBetween, cn, isDueEligibleForUnitDebts, generateIdempotencyKey, formatUnitOptionLabel } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useQueryClient } from '@tanstack/react-query';
@@ -333,9 +333,15 @@ export default function FinancialsPage() {
 
     if (duesPayments) {
       for (const p of duesPayments) {
-        const unitName = p.units
-          ? `${p.units.block ? `${p.units.block} Blok ` : ''}Daire ${p.units.unit_number}`
-          : 'Daire';
+        const matchedUnit = units?.find((u: any) => u.id === p.unit_id);
+        const unitLabel = formatUnitOptionLabel(
+          p.units
+            ? {
+                ...p.units,
+                unit_residents: p.units.unit_residents || matchedUnit?.unit_residents,
+              }
+            : matchedUnit
+        );
         const periodText = p.dues?.period ? `${formatPeriod(p.dues.period)} Aidatı` : 'Aidat Ödemesi';
         const subDetails = p.description
           ? `${periodText} · ${p.description}`
@@ -353,7 +359,7 @@ export default function FinancialsPage() {
           type: 'due_payment',
           date: p.payment_date,
           amount: Number(p.amount),
-          title: `${unitName} Aidat Ödemesi`,
+          title: `${unitLabel} Aidat Ödemesi`,
           subtitle: subDetails,
           categoryBadge: 'Aidat Tahsilatı',
           methodBadge: methodText,
@@ -2172,7 +2178,7 @@ export default function FinancialsPage() {
                                 className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300 shrink-0"
                               />
                               <span className="truncate">
-                                {u.block ? `${u.block} ` : ''}Daire {u.unit_number}
+                                {formatUnitOptionLabel(u)}
                               </span>
                             </label>
                           );
@@ -2290,7 +2296,7 @@ export default function FinancialsPage() {
                     { value: '', label: 'Daire seçin...' },
                     ...activeUnits.map((u) => ({
                       value: u.id,
-                      label: `${u.block ? `${u.block} Blok ` : ''}Daire ${u.unit_number}`,
+                      label: formatUnitOptionLabel(u),
                     })),
                   ]}
                 />
@@ -2850,11 +2856,11 @@ export default function FinancialsPage() {
 
             <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs space-y-1.5">
               <div className="flex justify-between">
-                <span className="text-gray-500">Daire:</span>
+                <span className="text-gray-500">Sakin / Daire:</span>
                 <span className="font-medium text-gray-900">
-                  {cancellingPayment.units
-                    ? `${cancellingPayment.units.block ? `${cancellingPayment.units.block} Blok ` : ''}Daire ${cancellingPayment.units.unit_number}`
-                    : 'Daire'}
+                  {formatUnitOptionLabel(
+                    cancellingPayment.units || units?.find((u: any) => u.id === cancellingPayment.unit_id)
+                  )}
                 </span>
               </div>
               <div className="flex justify-between">

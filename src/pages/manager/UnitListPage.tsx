@@ -10,7 +10,7 @@ import { Select } from '@/components/ui/Select';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency, formatPhone } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { cn, formatUnitOptionLabel, sortUnitResidents } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { useUnits, useCreateUnit, useCreateBatchUnits } from '@/hooks/useUnits';
 import { useDebtorUnits } from '@/hooks/useDashboard';
@@ -312,7 +312,14 @@ export default function UnitListPage() {
         <div className="space-y-3">
           {filteredUnits.map((unit: any) => {
             const debtorInfo = debtorMap.get(unit.id);
-            const residents = unit.unit_residents || unit.residents || [];
+            const rawResidents = unit.unit_residents || unit.residents || [];
+            const residents = sortUnitResidents(rawResidents).filter((r: any) => r.is_active !== false);
+            const primaryRes: any = residents[0];
+            const primaryResName =
+              primaryRes?.full_name?.trim() ||
+              primaryRes?.profiles?.full_name?.trim() ||
+              (primaryRes?.phone ? formatPhone(primaryRes.phone) : '');
+            const unitDisplayLabel = formatUnitOptionLabel(unit, primaryResName);
 
             return (
               <Card
@@ -349,8 +356,8 @@ export default function UnitListPage() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-gray-900 text-sm sm:text-base">
-                          {unit.block ? `${unit.block} Blok ` : ''}Daire {unit.unit_number}
+                        <span className="font-bold text-gray-900 text-sm sm:text-base truncate">
+                          {unitDisplayLabel}
                         </span>
                         {unit.floor && (
                           <span className="text-xs text-gray-500 font-medium">({unit.floor}. Kat)</span>
@@ -358,25 +365,23 @@ export default function UnitListPage() {
                         {!unit.is_active && <Badge variant="neutral">Pasif</Badge>}
                       </div>
 
-                      {residents.length > 0 ? (
+                      {residents.length > 1 ? (
                         <div className="mt-1 space-y-0.5">
-                          {residents.slice(0, 2).map((r: any) => {
+                          {residents.slice(1, 2).map((r: any) => {
                             const resName = r.full_name?.trim() || r.profiles?.full_name?.trim();
                             const resPhone = r.phone?.trim() || r.profiles?.phone?.trim();
-                            // İsmi varsa sadece ismi gözüksün, isim yoksa telefon numarası fallback olsun
-                            const displayName = resName || (resPhone ? formatPhone(resPhone) : 'Sakin');
-
+                            const extraName = resName || (resPhone ? formatPhone(resPhone) : 'Sakin');
                             return (
-                              <div key={r.id || displayName} className="flex items-center gap-1.5 text-xs text-gray-600 truncate">
-                                <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                <span className="font-medium text-gray-800 truncate">{displayName}</span>
+                              <div key={r.id || extraName} className="flex items-center gap-1.5 text-xs text-gray-500 truncate">
+                                <User className="w-3 h-3 text-gray-400 shrink-0" />
+                                <span className="truncate">{extraName}</span>
                               </div>
                             );
                           })}
                         </div>
-                      ) : (
+                      ) : residents.length === 0 ? (
                         <p className="text-xs text-gray-400 mt-0.5">Sakin kaydı yok</p>
-                      )}
+                      ) : null}
                     </div>
                   </div>
 

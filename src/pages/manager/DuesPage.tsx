@@ -22,6 +22,7 @@ import {
   CheckSquare,
   Square,
   Undo2,
+  User,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -33,7 +34,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency, formatShortDate, formatPeriod, isOverdue } from '@/lib/format';
-import { buildWhatsAppUrl, getPeriodsBetween, cn, generateIdempotencyKey } from '@/lib/utils';
+import { buildWhatsAppUrl, getPeriodsBetween, cn, generateIdempotencyKey, getPrimaryResident, getResidentDisplayName, sortUnitResidents, getUnitDisplayParts, formatUnitOptionLabel } from '@/lib/utils';
 import { buildDebtReminderText, getSmartPortalUrl } from '@/lib/debtReminder';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
@@ -608,7 +609,7 @@ export default function DuesPage() {
       due.unit?.unit_residents ||
       [];
 
-    const candidates = rawResidents
+    const candidates = sortUnitResidents(rawResidents)
       .map((r: any) => ({
         id: r.id,
         full_name: r.full_name?.trim() || r.profiles?.full_name?.trim() || 'İsimsiz Sakin',
@@ -842,6 +843,13 @@ export default function DuesPage() {
             const overdue = due.status !== 'paid' && isOverdue(due.due_date);
             const isSelected = selectedDueIds.includes(due.id);
             const isPaidOrPartial = due.status === 'paid' || paid > 0;
+            const targetUnit = units?.find((u: any) => u.id === due.unit_id);
+            const unitResidents = targetUnit?.unit_residents || (targetUnit as any)?.residents || due.units?.unit_residents || due.unit?.unit_residents || due.unit?.residents;
+            const unitDisplayLabel = formatUnitOptionLabel({
+              unit_number: due.units?.unit_number || due.unit?.unit_number || targetUnit?.unit_number,
+              block: due.units?.block || due.unit?.block || targetUnit?.block,
+              unit_residents: unitResidents,
+            });
 
             return (
               <Card
@@ -853,13 +861,13 @@ export default function DuesPage() {
                     : 'border-gray-200/90 hover:border-gray-300'
                 )}
               >
-                {/* 1. Satır: Seçim Kutusu + Daire Bilgisi + Durum Rozeti + Tutar */}
+                {/* 1. Satır: Seçim Kutusu + Sakin (Daire) Başlığı + Durum Rozeti + Tutar */}
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                  <div className="flex items-start gap-2.5 min-w-0">
                     <button
                       type="button"
                       onClick={() => handleToggleSelectDue(due.id)}
-                      className="p-1 -m-1 text-gray-400 hover:text-primary-600 transition-colors shrink-0"
+                      className="p-1 -m-1 mt-0.5 text-gray-400 hover:text-primary-600 transition-colors shrink-0"
                       title={isSelected ? 'Seçimi kaldır' : 'Seç'}
                     >
                       {isSelected ? (
@@ -869,40 +877,44 @@ export default function DuesPage() {
                       )}
                     </button>
 
-                    <span className="text-sm sm:text-base font-bold text-gray-900 tracking-tight">
-                      {due.units?.block ? `${due.units.block} ` : ''}Daire {due.units?.unit_number}
-                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm sm:text-base font-bold text-gray-900 tracking-tight truncate">
+                          {unitDisplayLabel}
+                        </span>
 
-                    <Badge
-                      variant={
-                        due.status === 'paid'
-                          ? 'success'
-                          : due.status === 'partially_paid'
-                          ? 'warning'
-                          : overdue
-                          ? 'danger'
-                          : 'neutral'
-                      }
-                      className="text-[11px]"
-                    >
-                      {due.status === 'paid'
-                        ? 'Ödendi'
-                        : due.status === 'partially_paid'
-                        ? 'Kısmi'
-                        : overdue
-                        ? 'Gecikmiş'
-                        : 'Ödenmemiş'}
-                    </Badge>
+                        <Badge
+                          variant={
+                            due.status === 'paid'
+                              ? 'success'
+                              : due.status === 'partially_paid'
+                              ? 'warning'
+                              : overdue
+                              ? 'danger'
+                              : 'neutral'
+                          }
+                          className="text-[11px]"
+                        >
+                          {due.status === 'paid'
+                            ? 'Ödendi'
+                            : due.status === 'partially_paid'
+                            ? 'Kısmi'
+                            : overdue
+                            ? 'Gecikmiş'
+                            : 'Ödenmemiş'}
+                        </Badge>
 
-                    {due.due_type === 'monthly' ? (
-                      <span className="text-[10px] text-primary-700 bg-primary-50 border border-primary-200/60 px-1.5 py-0.5 rounded font-medium">
-                        {due.period ? formatPeriod(due.period) : 'Aylık Aidat'}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded font-medium">
-                        Ek Borç
-                      </span>
-                    )}
+                        {due.due_type === 'monthly' ? (
+                          <span className="text-[10px] text-primary-700 bg-primary-50 border border-primary-200/60 px-1.5 py-0.5 rounded font-medium">
+                            {due.period ? formatPeriod(due.period) : 'Aylık Aidat'}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded font-medium">
+                            Ek Borç
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="text-right shrink-0">
@@ -1210,10 +1222,10 @@ export default function DuesPage() {
                     key={unit.id}
                     className="flex items-center justify-between bg-gray-50 hover:bg-gray-100 rounded-lg px-3 py-2 transition-colors"
                   >
-                    <span className="text-sm font-medium">
-                      {unit.block ? `${unit.block} ` : ''}Daire {unit.unit_number}
+                    <span className="text-sm font-medium truncate pr-2">
+                      {formatUnitOptionLabel(unit)}
                     </span>
-                    <div className="w-32">
+                    <div className="w-32 shrink-0">
                       <input
                         type="number"
                         className="w-full text-right text-sm border rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 outline-none bg-white font-medium"
@@ -1298,7 +1310,7 @@ export default function DuesPage() {
               { value: '', label: 'Daire seçin...' },
               ...(units?.map((u: any) => ({
                 value: u.id,
-                label: `Daire ${u.unit_number}${u.block ? ` (${u.block} Blok)` : ''}`,
+                label: formatUnitOptionLabel(u),
               })) ?? []),
             ]}
           />
@@ -1387,7 +1399,7 @@ export default function DuesPage() {
         onClose={() => setQuickPayDue(null)}
         title={
           quickPayDue
-            ? `Ödeme Kaydet - ${quickPayDue.units?.block ? `${quickPayDue.units.block} ` : ''}Daire ${quickPayDue.units?.unit_number}`
+            ? `Ödeme Kaydet - ${formatUnitOptionLabel(quickPayDue.units || quickPayDue.unit || units?.find((u: any) => u.id === quickPayDue.unit_id))}`
             : 'Ödeme Kaydet'
         }
       >
@@ -1395,9 +1407,9 @@ export default function DuesPage() {
           <div className="space-y-4">
             <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 text-xs space-y-1.5">
               <div className="flex justify-between">
-                <span className="text-emerald-800 font-medium">Daire:</span>
+                <span className="text-emerald-800 font-medium">Sakin / Daire:</span>
                 <span className="font-bold text-emerald-950">
-                  {quickPayDue.units?.block ? `${quickPayDue.units.block} ` : ''}Daire {quickPayDue.units?.unit_number}
+                  {formatUnitOptionLabel(quickPayDue.units || quickPayDue.unit || units?.find((u: any) => u.id === quickPayDue.unit_id))}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -1476,7 +1488,7 @@ export default function DuesPage() {
         onClose={() => setUndoPaymentDue(null)}
         title={
           undoPaymentDue
-            ? `Ödemeyi Geri Al - ${undoPaymentDue.units?.block ? `${undoPaymentDue.units.block} ` : ''}Daire ${undoPaymentDue.units?.unit_number}`
+            ? `Ödemeyi Geri Al - ${formatUnitOptionLabel(undoPaymentDue.units || undoPaymentDue.unit || units?.find((u: any) => u.id === undoPaymentDue.unit_id))}`
             : 'Ödemeyi Geri Al'
         }
       >
@@ -1489,9 +1501,9 @@ export default function DuesPage() {
             <div className="space-y-4">
               <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 text-xs space-y-1.5">
                 <div className="flex justify-between">
-                  <span className="text-amber-800 font-medium">Daire:</span>
+                  <span className="text-amber-800 font-medium">Sakin / Daire:</span>
                   <span className="font-bold text-amber-950">
-                    {undoPaymentDue.units?.block ? `${undoPaymentDue.units.block} ` : ''}Daire {undoPaymentDue.units?.unit_number}
+                    {formatUnitOptionLabel(undoPaymentDue.units || undoPaymentDue.unit || units?.find((u: any) => u.id === undoPaymentDue.unit_id))}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1579,9 +1591,9 @@ export default function DuesPage() {
           <div className="space-y-4">
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs space-y-1">
               <div className="flex justify-between">
-                <span className="text-red-800 font-medium">Daire:</span>
+                <span className="text-red-800 font-medium">Sakin / Daire:</span>
                 <span className="font-bold text-red-950">
-                  {deleteConfirmDue.units?.block ? `${deleteConfirmDue.units.block} ` : ''}Daire {deleteConfirmDue.units?.unit_number}
+                  {formatUnitOptionLabel(deleteConfirmDue.units || deleteConfirmDue.unit || units?.find((u: any) => u.id === deleteConfirmDue.unit_id))}
                 </span>
               </div>
               <div className="flex justify-between">

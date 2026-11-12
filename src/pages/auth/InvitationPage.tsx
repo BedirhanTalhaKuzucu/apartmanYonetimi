@@ -34,7 +34,7 @@ export default function InvitationPage() {
   }, [invitation]);
 
   const handleAccept = async () => {
-    if (!invitation) return;
+    if (!invitation || acceptMutation.isPending) return;
     try {
       await acceptMutation.mutateAsync(invitation);
       navigate('/sakin');
@@ -44,6 +44,7 @@ export default function InvitationPage() {
   };
 
   const handleGoogleSignIn = async () => {
+    if (authLoading) return;
     setAuthLoading(true);
     try {
       await signInWithGoogle(`${window.location.origin}/davet/${token}`);
@@ -56,21 +57,24 @@ export default function InvitationPage() {
 
   const handleAuthAndAccept = async (e: FormEvent) => {
     e.preventDefault();
-    if (!invitation) return;
+    if (!invitation || authLoading || acceptMutation.isPending) return;
 
     setAuthLoading(true);
     try {
       if (authMode === 'register') {
         if (!fullName.trim()) {
           toast.error('Lütfen adınızı girin.');
+          setAuthLoading(false);
           return;
         }
         if (!email.trim()) {
           toast.error('E-posta adresi zorunludur.');
+          setAuthLoading(false);
           return;
         }
         if (password.length < 8) {
           toast.error('Şifre en az 8 karakter olmalıdır.');
+          setAuthLoading(false);
           return;
         }
         await signUp(phone, password, fullName.trim(), email.trim());
@@ -78,8 +82,7 @@ export default function InvitationPage() {
         await signIn(phone, password);
       }
 
-      // After auth, accept the invitation
-      // Small delay to let auth state settle
+      // Giriş/Kayıt sonrası daveti kabul et
       setTimeout(async () => {
         try {
           await acceptMutation.mutateAsync(invitation);

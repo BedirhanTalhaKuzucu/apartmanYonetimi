@@ -28,9 +28,9 @@ export default function NewRequestPage() {
   const { currentApartment, user } = useAuthStore();
   const createRequest = useCreateRequest();
 
-  // Sakinin aktif dairelerini getir
+  // Sakinin aktif dairelerini getir (aktif apartmana göre filtrelenmiş)
   const { data: userUnits, isLoading: unitsLoading } = useQuery({
-    queryKey: ['my-resident-units', user?.id],
+    queryKey: ['my-resident-units', user?.id, currentApartment?.id],
     queryFn: async () => {
       if (!user) return [];
       const { data, error } = await supabase
@@ -39,7 +39,11 @@ export default function NewRequestPage() {
         .eq('user_id', user.id)
         .eq('is_active', true);
       if (error) throw error;
-      return (data || []).map((r: any) => r.units).filter(Boolean);
+      const units = (data || []).map((r: any) => r.units).filter(Boolean);
+      if (currentApartment?.id) {
+        return units.filter((u: any) => u.apartment_id === currentApartment.id);
+      }
+      return units;
     },
     enabled: !!user,
   });

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
+import { notifyManagers, getUnitAndResidentLabel } from '@/services/notificationService';
 import type { Invitation } from '@/types';
 import { generateToken } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -19,6 +20,27 @@ export function useInvitations(apartmentId: string | undefined) {
       return data as (Invitation & { units: { unit_number: string; block: string | null } })[];
     },
     enabled: !!apartmentId,
+  });
+}
+
+/**
+ * Belirli bir daireye ait bekleyen (pending) davetleri listeler.
+ */
+export function useUnitInvitations(unitId: string | undefined) {
+  return useQuery({
+    queryKey: ['unit-invitations', unitId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('invitations')
+        .select('*')
+        .eq('unit_id', unitId!)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as Invitation[];
+    },
+    enabled: !!unitId,
   });
 }
 
@@ -55,6 +77,7 @@ export function useCreateInvitation() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invitations', data.apartment_id] });
+      queryClient.invalidateQueries({ queryKey: ['unit-invitations', data.unit_id] });
       toast.success('Davet bağlantısı oluşturuldu.');
     },
     onError: (error: Error) => {
@@ -81,6 +104,7 @@ export function useCancelInvitation() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invitations', data.apartment_id] });
+      queryClient.invalidateQueries({ queryKey: ['unit-invitations', data.unit_id] });
       toast.success('Davet iptal edildi.');
     },
     onError: (error: Error) => {
@@ -235,20 +259,82 @@ export function useAcceptInvitation() {
         }
       }
 
-      // 3. Yedek: Doğrudan tablo ekleme/güncelleme
-      const { error: residentError } = await supabase
+      // 3. Yedek: Doğrudan tablo ekleme/güncelleme (Mükerrer sakin oluşmasını engelleyen akıllı eşleme)
+      const { data: existingUserResident } = await supabase
         .from('unit_residents')
-        .insert({
-          unit_id: invitation.unit_id,
-          user_id: user.id,
-          full_name: invitation.invited_name || '',
-          phone: invitation.invited_phone || '',
-          role: invitation.resident_role || 'tenant',
-          is_active: true,
-        });
+        .select('id, user_id, phone, full_name, is_active')
+        .eq('unit_id', invitation.unit_id)
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-      if (residentError && residentError.code !== '23505') {
-        throw residentError;
+      if (existingUserResident) {
+        // Kullanıcı zaten bu dairede kayıtlı! Yeni satır ekleme, sadece aktif et ve rolünü güncelle
+        await supabase
+          .from('unit_residents')
+          .update({
+            is_active: true,
+            role: invitation.resident_role || 'tenant',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingUserResident.id);
+      } else {
+        // Kullanıcı henüz bağlı değilse, yönetici tarafından önceden oluşturulmuş 'user_id IS NULL'
+        // ve telefon/isim eşleşen bir sakin var mı kontrol et (Sakin Ekle ile eklenmiş kayıt)
+        const targetPhone = invitation.invited_phone || user.phone;
+        let matchedOfflineResident: any = null;
+
+        if (targetPhone) {
+          const { data: byPhone } = await supabase
+            .from('unit_residents')
+            .select('id, user_id, phone, full_name')
+            .eq('unit_id', invitation.unit_id)
+            .is('user_id', null)
+            .eq('phone', targetPhone)
+            .maybeSingle();
+          matchedOfflineResident = byPhone;
+        }
+
+        if (!matchedOfflineResident && invitation.invited_name) {
+          const { data: byName } = await supabase
+            .from('unit_residents')
+            .select('id, user_id, phone, full_name')
+            .eq('unit_id', invitation.unit_id)
+            .is('user_id', null)
+            .ilike('full_name', invitation.invited_name.trim())
+            .maybeSingle();
+          matchedOfflineResident = byName;
+        }
+
+        if (matchedOfflineResident) {
+          // Önceden eklenen çevrimdışı sakini bu kullanıcıyla eşle!
+          await supabase
+            .from('unit_residents')
+            .update({
+              user_id: user.id,
+              is_active: true,
+              role: invitation.resident_role || 'tenant',
+              full_name: matchedOfflineResident.full_name || invitation.invited_name || '',
+              phone: matchedOfflineResident.phone || invitation.invited_phone || user.phone || '',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', matchedOfflineResident.id);
+        } else {
+          // Eşleşen kayıt yoksa yeni bir sakin oluştur
+          const { error: residentError } = await supabase
+            .from('unit_residents')
+            .insert({
+              unit_id: invitation.unit_id,
+              user_id: user.id,
+              full_name: invitation.invited_name || '',
+              phone: invitation.invited_phone || user.phone || '',
+              role: invitation.resident_role || 'tenant',
+              is_active: true,
+            });
+
+          if (residentError && residentError.code !== '23505') {
+            throw residentError;
+          }
+        }
       }
 
       const { error: updateError } = await supabase
@@ -260,38 +346,67 @@ export function useAcceptInvitation() {
         })
         .eq('id', invitation.id);
 
-      if (updateError && residentError?.code !== '23505') {
+      if (updateError) {
         throw updateError;
+      }
+
+      // Aynı daire ve aynı telefon için bekleyen diğer mükerrer davetler varsa onları da kapat
+      if (invitation.invited_phone) {
+        await supabase
+          .from('invitations')
+          .update({
+            status: 'accepted',
+            accepted_by: user.id,
+            accepted_at: new Date().toISOString(),
+          })
+          .eq('unit_id', invitation.unit_id)
+          .eq('invited_phone', invitation.invited_phone)
+          .eq('status', 'pending');
       }
 
       return invitation;
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, invitation) => {
       queryClient.invalidateQueries({ queryKey: ['invitations'] });
-      queryClient.invalidateQueries({ queryKey: ['unit-residents'] });
+      queryClient.invalidateQueries({ queryKey: ['unit-invitations', invitation.unit_id] });
+      queryClient.invalidateQueries({ queryKey: ['unit-residents', invitation.unit_id] });
+      queryClient.invalidateQueries({ queryKey: ['unit', invitation.unit_id] });
+      queryClient.invalidateQueries({ queryKey: ['apartment-residents'] });
+      queryClient.invalidateQueries({ queryKey: ['units'] });
       queryClient.invalidateQueries({ queryKey: ['user-role'] });
+      queryClient.invalidateQueries({ queryKey: ['my-unit-ids'] });
+      queryClient.invalidateQueries({ queryKey: ['apartments'] });
 
-      // Sakin rolünü ve apartmanını authStore'da anında güncelle
-      if (user) {
-        try {
-          const { data: residentRecord } = await supabase
-            .from('unit_residents')
-            .select('*, units(*, apartments(*))')
-            .eq('user_id', user.id)
-            .eq('is_active', true)
-            .limit(1)
-            .maybeSingle();
+      // Yöneticilere bildirim gönder (daire ve sakin ad-soyad ile)
+      const currentProfile = useAuthStore.getState().profile;
+      const senderLabel = await getUnitAndResidentLabel(
+        invitation.unit_id,
+        user?.id,
+        currentProfile?.full_name || invitation.invited_name
+      );
+      notifyManagers({
+        apartmentId: invitation.apartment_id,
+        title: 'Sakin Uygulamaya Katıldı 🎉',
+        body: senderLabel
+          ? `${senderLabel} daveti kabul ederek uygulamaya katıldı.`
+          : 'Yeni bir sakin daveti kabul ederek sisteme katıldı.',
+        type: 'invitation_accepted',
+        referenceType: 'unit',
+        referenceId: invitation.unit_id,
+      }).catch(() => {});
 
-          if (residentRecord) {
-            useAuthStore.getState().setUserRole('resident');
-            const unit = residentRecord.units as any;
-            if (unit?.apartments) {
-              useAuthStore.getState().setCurrentApartment(unit.apartments);
-            }
-          }
-        } catch {
-          // ignore
+      // Tüm apartman üyeliklerini yenile ve davet edilen apartmana sakin rolüyle geç
+      try {
+        await useAuthStore.getState().initialize();
+        const memberships = useAuthStore.getState().apartmentMemberships;
+        const targetMembership = memberships.find(
+          (m) => m.apartment.id === invitation.apartment_id && m.role === 'resident'
+        );
+        if (targetMembership) {
+          useAuthStore.getState().switchApartment(targetMembership.apartment, 'resident');
         }
+      } catch {
+        // ignore
       }
 
       toast.success('Davet kabul edildi! Artık daireye erişebilirsiniz.');

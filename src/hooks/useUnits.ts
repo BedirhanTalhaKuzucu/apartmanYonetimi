@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
+import { sortUnitResidents } from '@/lib/utils';
 import type { Unit, UnitResident } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -16,7 +17,10 @@ export function useUnits(apartmentId: string | undefined) {
           .order('unit_number', { ascending: true });
 
         if (!error && data) {
-          return data as (Unit & { unit_residents: UnitResident[] })[];
+          return data.map((u: any) => ({
+            ...u,
+            unit_residents: sortUnitResidents(u.unit_residents),
+          })) as (Unit & { unit_residents: UnitResident[] })[];
         }
       } catch {
         // Fallback if profiles relation fails
@@ -29,7 +33,10 @@ export function useUnits(apartmentId: string | undefined) {
         .order('unit_number', { ascending: true });
 
       if (error) throw error;
-      return data as (Unit & { unit_residents: UnitResident[] })[];
+      return (data ?? []).map((u: any) => ({
+        ...u,
+        unit_residents: sortUnitResidents(u.unit_residents),
+      })) as (Unit & { unit_residents: UnitResident[] })[];
     },
     enabled: !!apartmentId,
   });
@@ -51,7 +58,10 @@ export function useUnit(id: string | undefined) {
           .single();
 
         if (!error && data) {
-          return data as Unit & { unit_residents: UnitResident[]; apartments: any };
+          return {
+            ...data,
+            unit_residents: sortUnitResidents((data as any).unit_residents),
+          } as Unit & { unit_residents: UnitResident[]; apartments: any };
         }
       } catch {
         // Fallback
@@ -68,7 +78,10 @@ export function useUnit(id: string | undefined) {
         .single();
 
       if (error) throw error;
-      return data as Unit & { unit_residents: UnitResident[]; apartments: any };
+      return {
+        ...data,
+        unit_residents: sortUnitResidents((data as any).unit_residents),
+      } as Unit & { unit_residents: UnitResident[]; apartments: any };
     },
     enabled: !!id,
   });
@@ -100,8 +113,21 @@ export function useCreateUnit() {
       }
       return data as Unit;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['units', data.apartment_id] });
+    onSuccess: async (data) => {
+      // Veritabanına yazma başarılıysa UI listesini anında güncelle
+      queryClient.setQueryData<(Unit & { unit_residents: UnitResident[] })[] | undefined>(
+        ['units', data.apartment_id],
+        (old) => {
+          if (!old) return [{ ...data, unit_residents: [] }];
+          if (old.some((u) => u.id === data.id)) return old;
+          const next = [...old, { ...data, unit_residents: [] }];
+          return next.sort((a, b) =>
+            String(a.unit_number).localeCompare(String(b.unit_number), 'tr', { numeric: true })
+          );
+        }
+      );
+      await queryClient.invalidateQueries({ queryKey: ['units', data.apartment_id] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Daire başarıyla eklendi.');
     },
     onError: (error: Error) => {
@@ -158,8 +184,9 @@ export function useCreateBatchUnits() {
       if (error) throw error;
       return { success: true, created_count: data?.length ?? 0 };
     },
-    onSuccess: (res, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['units', vars.apartment_id] });
+    onSuccess: async (res, vars) => {
+      await queryClient.invalidateQueries({ queryKey: ['units', vars.apartment_id] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success(`${res.created_count ?? ''} daire başarıyla oluşturuldu.`);
     },
     onError: (error: Error) => {
@@ -379,7 +406,7 @@ export function useUnitResidents(unitId: string | undefined) {
           .order('created_at', { ascending: true });
 
         if (!error && data) {
-          return data as UnitResident[];
+          return sortUnitResidents(data) as UnitResident[];
         }
       } catch {
         // Fallback
@@ -392,7 +419,7 @@ export function useUnitResidents(unitId: string | undefined) {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      return data as UnitResident[];
+      return sortUnitResidents(data) as UnitResident[];
     },
     enabled: !!unitId,
   });

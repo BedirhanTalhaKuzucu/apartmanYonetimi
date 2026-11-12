@@ -84,10 +84,10 @@ export function useCreateApartment() {
 
       return apartment as Apartment;
     },
-    onSuccess: (apartment) => {
+    onSuccess: async (apartment) => {
       queryClient.invalidateQueries({ queryKey: ['apartments'] });
-      setCurrentApartment(apartment);
-      setUserRole('manager');
+      await useAuthStore.getState().initialize();
+      useAuthStore.getState().switchApartment(apartment, 'manager');
       toast.success('Apartman başarıyla oluşturuldu.');
     },
     onError: (error: Error) => {

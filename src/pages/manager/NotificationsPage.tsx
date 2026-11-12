@@ -1,4 +1,4 @@
-﻿import { Bell, CheckCheck, CreditCard, Megaphone, Wrench, AlertTriangle, Clock } from 'lucide-react';
+﻿import { Bell, CheckCheck, CreditCard, Megaphone, Wrench, AlertTriangle, Clock, UserCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -17,15 +17,21 @@ const NOTIFICATION_ICONS: Record<string, any> = {
   payment_notification: CreditCard,
   request_created: Wrench,
   payment_received: CreditCard,
+  invitation_accepted: UserCheck,
+  payment_approved: CheckCheck,
+  payment_rejected: AlertTriangle,
 };
 
 const NOTIFICATION_COLORS: Record<string, string> = {
-  due_reminder: 'text-red-500 bg-red-50',
-  announcement: 'text-blue-500 bg-blue-50',
-  request_update: 'text-orange-500 bg-orange-50',
-  payment_notification: 'text-green-500 bg-green-50',
-  request_created: 'text-orange-500 bg-orange-50',
-  payment_received: 'text-green-500 bg-green-50',
+  due_reminder: 'text-amber-600 bg-amber-50',
+  announcement: 'text-blue-600 bg-blue-50',
+  request_update: 'text-orange-600 bg-orange-50',
+  payment_notification: 'text-emerald-600 bg-emerald-50',
+  request_created: 'text-orange-600 bg-orange-50',
+  payment_received: 'text-green-600 bg-green-50',
+  invitation_accepted: 'text-indigo-600 bg-indigo-50',
+  payment_approved: 'text-emerald-600 bg-emerald-50',
+  payment_rejected: 'text-rose-600 bg-rose-50',
 };
 
 export default function NotificationsPage() {
@@ -66,6 +72,9 @@ export default function NotificationsPage() {
           break;
         case 'payment_notification':
           navigate('/yonetici/odemeler?tab=bildirimler');
+          break;
+        case 'unit':
+          navigate(`/yonetici/daire/${notification.reference_id}`);
           break;
         default:
           break;

@@ -81,35 +81,45 @@ export default function RequestsPage() {
 
       {filteredRequests.length > 0 ? (
         <div className="space-y-2">
-          {filteredRequests.map((req: any) => (
-            <Card
-              key={req.id}
-              className="p-3 cursor-pointer hover:border-primary-300 transition-colors active:bg-gray-50"
-              onClick={() => setSelectedRequest(req)}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{req.title}</span>
-                    <Badge variant={STATUS_VARIANTS[req.status as RequestStatus]}>
-                      {STATUS_LABELS[req.status as RequestStatus]}
-                    </Badge>
+          {filteredRequests.map((req: any) => {
+            const unitObj = req.units || req.unit;
+            const unitLabel = unitObj?.unit_number
+              ? `${unitObj.block ? `${unitObj.block} Blok ` : ''}Daire ${unitObj.unit_number}`
+              : 'Daire Belirtilmemiş';
+            const requesterName = req.profiles?.full_name || req.user?.full_name;
+
+            return (
+              <Card
+                key={req.id}
+                className="p-3 cursor-pointer hover:border-primary-300 transition-colors active:bg-gray-50"
+                onClick={() => setSelectedRequest(req)}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium">{req.title}</span>
+                      <Badge variant={STATUS_VARIANTS[req.status as RequestStatus]}>
+                        {STATUS_LABELS[req.status as RequestStatus]}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-gray-600 font-medium mt-0.5">
+                      {requesterName ? `${requesterName} (${unitLabel})` : unitLabel}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {req.category ? `${req.category} · ` : ''}
+                      {formatShortDate(req.created_at)}
+                    </p>
+                    {req.description && (
+                      <p className="text-xs text-gray-400 mt-1 line-clamp-2">{req.description}</p>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Daire {req.unit?.unit_number}
-                    {req.category && ` · ${req.category}`}
-                    {' · '}{formatShortDate(req.created_at)}
-                  </p>
-                  {req.description && (
-                    <p className="text-xs text-gray-400 mt-1 line-clamp-2">{req.description}</p>
+                  {req.photo_urls && req.photo_urls.length > 0 && (
+                    <Image className="w-4 h-4 text-gray-400 ml-2 flex-shrink-0" />
                   )}
                 </div>
-                {req.photo_urls && req.photo_urls.length > 0 && (
-                  <Image className="w-4 h-4 text-gray-400 ml-2 flex-shrink-0" />
-                )}
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <EmptyState
@@ -132,14 +142,27 @@ function RequestDetail({
   onBack: () => void;
   onStatusChange: (id: string, status: RequestStatus) => void;
 }) {
-  const { data: comments, isLoading: commentsLoading } = useRequestComments(request.id);
+  const { data: comments, isLoading: commentsLoading } = useRequestComments(request.id, request.apartment_id);
   const addComment = useAddComment();
   const [commentText, setCommentText] = useState('');
+
+  const unitObj = request.units || request.unit;
+  const unitLabel = unitObj?.unit_number
+    ? `${unitObj.block ? `${unitObj.block} Blok ` : ''}Daire ${unitObj.unit_number}`
+    : 'Daire Belirtilmemiş';
+  const requesterName = request.profiles?.full_name || request.user?.full_name;
 
   const handleAddComment = async () => {
     if (!commentText.trim()) return;
     try {
-      await addComment.mutateAsync({ request_id: request.id, content: commentText.trim() });
+      await addComment.mutateAsync({
+        request_id: request.id,
+        content: commentText.trim(),
+        apartment_id: request.apartment_id,
+        unit_id: request.unit_id,
+        request_title: request.title,
+        request_created_by: request.created_by,
+      });
       setCommentText('');
     } catch (err: any) {
       toast.error(err.message || 'Yorum eklenemedi');
@@ -161,7 +184,9 @@ function RequestDetail({
         </div>
 
         <div className="text-xs text-gray-500 space-y-0.5">
-          <p>Daire {request.unit?.unit_number}</p>
+          <p className="font-medium text-gray-700">
+            {requesterName ? `${requesterName} (${unitLabel})` : unitLabel}
+          </p>
           {request.category && <p>Kategori: {request.category}</p>}
           <p>Oluşturulma: {formatDate(request.created_at)}</p>
         </div>
@@ -206,15 +231,24 @@ function RequestDetail({
           <LoadingSpinner />
         ) : comments && comments.length > 0 ? (
           <div className="space-y-3">
-            {comments.map((comment: any) => (
-              <div key={comment.id} className="bg-gray-50 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-gray-700">{comment.user?.full_name || 'Kullanıcı'}</span>
-                  <span className="text-xs text-gray-400">{formatShortDate(comment.created_at)}</span>
+            {comments.map((comment: any) => {
+              const rawName = comment.profiles?.full_name?.trim() || comment.user?.full_name?.trim() || '';
+              const authorName = rawName || (comment.is_manager ? 'Apartman Yöneticisi' : 'Kullanıcı');
+              return (
+                <div key={comment.id} className="bg-gray-50 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-gray-700">
+                      {authorName}
+                      {comment.is_manager && rawName && (
+                        <span className="ml-1 text-primary-700 font-semibold">(Yönetici)</span>
+                      )}
+                    </span>
+                    <span className="text-xs text-gray-400">{formatShortDate(comment.created_at)}</span>
+                  </div>
+                  <p className="text-sm text-gray-600">{comment.content}</p>
                 </div>
-                <p className="text-sm text-gray-600">{comment.content}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-sm text-gray-400">Henüz yorum yok</p>
